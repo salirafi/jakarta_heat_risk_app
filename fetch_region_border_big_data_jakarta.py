@@ -186,9 +186,6 @@ def preview_saved_table(db_path: Path, table_name: str, limit: int = 10) -> None
         )
         print(sample_df)
 
-# -----------------------------------------------------------------------------
-# Main pipeline
-# -----------------------------------------------------------------------------
 def main() -> None:
     print("=== Available GDB layers ===")
     layers = list_gdb_layers(GDB_PATH)
@@ -229,7 +226,5 @@ def main() -> None:
 
     print("\n=== SQLite preview ===")
     preview_saved_table(DB_PATH, OUTPUT_TABLE)
-
-
 if __name__ == "__main__":
     main()
