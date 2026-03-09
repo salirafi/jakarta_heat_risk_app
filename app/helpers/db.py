@@ -110,7 +110,6 @@ def get_forecast_time_bounds() -> dict:
 
     return {"min_time": min_time, "max_time": max_time}
 
-
 def get_available_dates() -> list[pd.Timestamp]:
     query = f"""
     SELECT DISTINCT DATE(local_datetime) AS available_date
@@ -126,7 +125,6 @@ def get_available_dates() -> list[pd.Timestamp]:
     dates = pd.to_datetime(df["available_date"], errors="coerce").dropna()
     return sorted(dates.dt.normalize().unique().tolist())
 
-
 def floor_to_time_step(ts, step_hours: int = 3):
     if ts is None or pd.isna(ts):
         return None
@@ -134,7 +132,6 @@ def floor_to_time_step(ts, step_hours: int = 3):
     ts = pd.Timestamp(ts)
     floored_hour = (ts.hour // step_hours) * step_hours
     return ts.replace(hour=floored_hour, minute=0, second=0, microsecond=0)
-
 
 def get_nearest_available_start_time(rounded_time):
     """
@@ -201,5 +198,6 @@ def get_first_available_time_on_or_after(start_time):
     out = pd.to_datetime(df.loc[0, "start_time"], errors="coerce")
     if pd.isna(out):
         return None
+
 
     return out
