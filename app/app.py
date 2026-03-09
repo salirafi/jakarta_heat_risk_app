@@ -688,44 +688,17 @@ def metric_card_html(label: str, value: str, extra_class: str = "") -> str:
 
 
 def build_heat_index_plot(
-    chart_df: pd.DataFrame,
+    initial_payload: dict,
     heat_index_label: str,
     empty_label: str,
     time_label: str,
 ) -> go.Figure:
     fig = go.Figure()
-    chart_df = chart_df.copy()
-    chart_df["local_datetime"] = pd.to_datetime(chart_df["local_datetime"], errors="coerce")
-    chart_df = chart_df.dropna(subset=["local_datetime"]).reset_index(drop=True)
-
-    x_values = chart_df["local_datetime"].dt.to_pydatetime()
-
-    if chart_df.empty:
-        fig.update_layout(
-            height=220,
-            margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
-            annotations=[
-                dict(
-                    text=empty_label,
-                    x=0.5,
-                    y=0.5,
-                    xref="paper",
-                    yref="paper",
-                    showarrow=False,
-                    font=dict(size=14, color="#666"),
-                )
-            ],
-        )
-        return fig
 
     fig.add_trace(
         go.Scatter(
-            x=x_values,
-            y=chart_df["heat_index_c"],
+            x=initial_payload["x"],
+            y=initial_payload["y"],
             mode="lines+markers",
             line=dict(color="black", width=2),
             marker=dict(size=5),
@@ -736,8 +709,77 @@ def build_heat_index_plot(
         )
     )
 
-    y_min = chart_df["heat_index_c"].min()
-    y_max = chart_df["heat_index_c"].max()
+    annotations = []
+    if initial_payload["is_empty"]:
+        annotations = [
+            dict(
+                text=empty_label,
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                font=dict(size=14, color="#666"),
+            )
+        ]
+
+    fig.update_layout(
+        height=220,
+        margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        annotations=annotations,
+        xaxis=dict(
+            title=None,
+            tickformat="%b %d %H:%M",
+            tickangle=0,
+            showgrid=False,
+            zeroline=False,
+            visible=not initial_payload["is_empty"],
+        ),
+        yaxis=dict(
+            title=f"{heat_index_label} (°C)",
+            range=initial_payload["y_range"],
+            gridcolor="rgba(0,0,0,0.08)",
+            zeroline=False,
+            visible=not initial_payload["is_empty"],
+        ),
+        hoverlabel=dict(
+            bgcolor="rgba(203, 210, 200, 0.4)",
+            font_size=13,
+            font_family="Arial",
+            font_color="#222",
+            bordercolor="rgba(0,0,0,0.9)",
+            align="left",
+            namelength=-1,
+        )
+    )
+
+    return fig
+
+def build_heat_index_series_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["local_datetime", "heat_index_c"])
+
+    chart_df = (
+        df.groupby("local_datetime", as_index=False)["heat_index_c"]
+        .mean()
+        .sort_values("local_datetime")
+        .reset_index(drop=True)
+    )
+    return chart_df
+
+def build_heat_index_payload(chart_df: pd.DataFrame):
+    chart_df = chart_df.copy()
+    chart_df["local_datetime"] = pd.to_datetime(chart_df["local_datetime"], errors="coerce")
+    chart_df = chart_df.dropna(subset=["local_datetime"]).reset_index(drop=True)
+
+    x_values = chart_df["local_datetime"].dt.to_pydatetime().tolist()
+    y_values = chart_df["heat_index_c"].tolist()
+
+    y_min = chart_df["heat_index_c"].min() if not chart_df.empty else np.nan
+    y_max = chart_df["heat_index_c"].max() if not chart_df.empty else np.nan
 
     if pd.notna(y_min) and pd.notna(y_max):
         if y_min == y_max:
@@ -747,40 +789,16 @@ def build_heat_index_plot(
             pad = 0.05 * (y_max - y_min)
             y_min -= pad
             y_max += pad
+        y_range = [y_min, y_max]
     else:
-        y_min, y_max = None, None
+        y_range = None
 
-    fig.update_layout(
-        height=220,
-        margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,
-        xaxis=dict(
-            title=None,
-            tickformat="%b %d %H:%M",
-            tickangle=0,
-            showgrid=False,
-            zeroline=False,
-        ),
-        yaxis=dict(
-            title=f"{heat_index_label} (°C)",
-            range=[y_min, y_max] if y_min is not None else None,
-            gridcolor="rgba(0,0,0,0.08)",
-            zeroline=False,
-        ),
-        hoverlabel=dict(
-            bgcolor="rgba(203, 210, 200, 0.4)",
-            font_size=13,
-            font_family="Arial",
-            font_color="#222",
-            bordercolor="rgba(0,0,0,0.9)",
-            align="left",
-            namelength=-1
-            )
-    )
-
-    return fig
+    return {
+        "x": x_values,
+        "y": y_values,
+        "y_range": y_range,
+        "is_empty": chart_df.empty,
+    }
 
 def short_city_name(name: str) -> str:
     if pd.isna(name):
@@ -788,8 +806,44 @@ def short_city_name(name: str) -> str:
     name = str(name).strip()
     return name.replace("Kota Adm. ", "").replace("Kab. Adm. ", "")
 
+def build_city_color_map(city_names: list[str]) -> dict[str, str]:
+    city_colors = {
+        "Jakarta Barat": "#1f77b4",
+        "Jakarta Pusat": "#17becf",
+        "Jakarta Selatan": "#8c564b",
+        "Jakarta Timur": "#7f7f7f",
+        "Jakarta Utara": "#393b79",
+    }
+
+    fallback_colors = [
+        "#4C6EF5", "#F59F00", "#12B886", "#E8590C", "#C2255C",
+        "#7B61FF", "#2F9E44", "#D6336C", "#1098AD", "#6741D9"
+    ]
+
+    color_map = {}
+    for i, city in enumerate(city_names):
+        color_map[city] = city_colors.get(city, fallback_colors[i % len(fallback_colors)])
+    return color_map
+
+
+def get_fixed_city_order(forecast_df: pd.DataFrame) -> list[str]:
+    if forecast_df.empty or "kotkab" not in forecast_df.columns:
+        return []
+
+    cities = (
+        forecast_df["kotkab"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .sort_values()
+        .unique()
+        .tolist()
+    )
+    return [short_city_name(city) for city in cities]
+
 def build_city_summary_plot(
-    summary_df: pd.DataFrame,
+    city_order: list[str],
+    initial_payload: dict,
     temperature_label: str,
     humidity_label: str,
     heat_index_label: str,
@@ -806,7 +860,7 @@ def build_city_summary_plot(
         ),
     )
 
-    if summary_df.empty:
+    if not city_order:
         fig.update_layout(
             height=320,
             margin=dict(l=0, r=0, t=30, b=0),
@@ -828,41 +882,17 @@ def build_city_summary_plot(
         )
         return fig
 
-    summary_df = summary_df.copy().sort_values("kotkab").reset_index(drop=True)
-    summary_df["city_short"] = summary_df["kotkab"].apply(short_city_name)
-
-    city_colors = {
-        "Jakarta Barat": "#1f77b4",   # blue
-        "Jakarta Pusat": "#17becf",   # cyan
-        "Jakarta Selatan": "#8c564b", # brown
-        "Jakarta Timur": "#7f7f7f",   # gray
-        "Jakarta Utara": "#393b79",   # indigo
-    }
-
-    # fallback color if a city is outside the predefined list
-    fallback_colors = [
-        "#4C6EF5", "#F59F00", "#12B886", "#E8590C", "#C2255C",
-        "#7B61FF", "#2F9E44", "#D6336C", "#1098AD", "#6741D9"
-    ]
-
-    color_map = {}
-    for i, city in enumerate(summary_df["city_short"]):
-        color_map[city] = city_colors.get(city, fallback_colors[i % len(fallback_colors)])
+    color_map = build_city_color_map(city_order)
 
     metrics = [
-        ("temperature_c", temperature_label),
-        ("humidity_pct", humidity_label),
-        ("heat_index_c", heat_index_label),
+        ("temperature_c", temperature_label, "°C"),
+        ("humidity_pct", humidity_label, "%"),
+        ("heat_index_c", heat_index_label, "°C"),
     ]
 
-    # Add one trace per city per subplot
-    # Show legend only in the first subplot so there is only one legend
-    for col_idx, (metric_col, metric_label) in enumerate(metrics, start=1):
-        for _, row in summary_df.iterrows():
-            city = row["city_short"]
-            value = row[metric_col]
-
-            unit = "°C" if metric_col != "humidity_pct" else "%"
+    for col_idx, (metric_col, metric_label, unit) in enumerate(metrics, start=1):
+        for city_idx, city in enumerate(city_order):
+            value = initial_payload[metric_col][city_idx]
 
             fig.add_trace(
                 go.Bar(
@@ -872,9 +902,7 @@ def build_city_summary_plot(
                     legendgroup=city,
                     showlegend=(col_idx == 1),
                     marker_color=color_map[city],
-                    hovertemplate=(
-                        f"{city}<br>{metric_label}: %{{y:.1f}} {unit}<extra></extra>"
-                    ),
+                    hovertemplate=f"{city}<br>{metric_label}: %{{y:.1f}} {unit}<extra></extra>",
                 ),
                 row=1,
                 col=col_idx,
@@ -915,32 +943,53 @@ def build_city_summary_plot(
         linewidth=1,
     )
 
-    fig.update_yaxes(
-        # title="°C",
-        row=1,
-        col=1,
-        title_standoff=5,
-        gridcolor="rgba(0,0,0,0.08)",
-        zeroline=False,
-    )
-    fig.update_yaxes(
-        # title="%",
-        row=1,
-        col=2,
-        title_standoff=5,
-        gridcolor="rgba(0,0,0,0.08)",
-        zeroline=False,
-    )
-    fig.update_yaxes(
-        # title="°C",
-        row=1,
-        col=3,
-        title_standoff=5,
-        gridcolor="rgba(0,0,0,0.08)",
-        zeroline=False,
-    )
+    fig.update_yaxes(row=1, col=1, title_standoff=5, gridcolor="rgba(0,0,0,0.08)", zeroline=False)
+    fig.update_yaxes(row=1, col=2, title_standoff=5, gridcolor="rgba(0,0,0,0.08)", zeroline=False)
+    fig.update_yaxes(row=1, col=3, title_standoff=5, gridcolor="rgba(0,0,0,0.08)", zeroline=False)
 
     return fig
+
+def build_city_summary_payload(
+    summary_df: pd.DataFrame,
+    city_order: list[str],
+):
+    metric_cols = ["temperature_c", "humidity_pct", "heat_index_c"]
+
+    if summary_df.empty:
+        summary_map = {}
+    else:
+        df = summary_df.copy()
+        df["city_short"] = df["kotkab"].apply(short_city_name)
+        summary_map = df.set_index("city_short")[metric_cols].to_dict(orient="index")
+
+    payload = {}
+    for metric_col in metric_cols:
+        payload[metric_col] = [
+            summary_map.get(city, {}).get(metric_col, np.nan)
+            for city in city_order
+        ]
+
+    return payload
+
+def city_summary_at_time(df: pd.DataFrame, selected_time) -> pd.DataFrame:
+    if df.empty or selected_time is None:
+        return pd.DataFrame()
+
+    snap = df[df["local_datetime"] == pd.Timestamp(selected_time)].copy()
+    if snap.empty:
+        return pd.DataFrame()
+
+    summary = (
+        snap.groupby("kotkab", as_index=False)
+        .agg(
+            temperature_c=("temperature_c", "mean"),
+            humidity_pct=("humidity_pct", "mean"),
+            heat_index_c=("heat_index_c", "mean"),
+        )
+        .sort_values("kotkab")
+        .reset_index(drop=True)
+    )
+    return summary
 
 def guide_button_id(level: str) -> str:
     return {
@@ -1942,6 +1991,80 @@ def server(input, output, session):
         widget.data[0].z = payload["z"]
         widget.data[0].customdata = payload["customdata"]
 
+    @reactive.effect
+    def _update_heat_index_plot_in_place():
+        data = app_data()
+        if data["error"] is not None:
+            return
+
+        df = selected_region_df()
+        chart_df = build_heat_index_series_df(df)
+        payload = build_heat_index_payload(chart_df)
+
+        widget = heat_index_evolution_plot.widget
+        if widget is None or len(widget.data) == 0:
+            return
+
+        # Update trace data only
+        widget.data[0].x = payload["x"]
+        widget.data[0].y = payload["y"]
+
+        # Update y-axis range
+        widget.layout.yaxis.range = payload["y_range"]
+
+        # Toggle axes visibility
+        widget.layout.xaxis.visible = not payload["is_empty"]
+        widget.layout.yaxis.visible = not payload["is_empty"]
+
+        # Toggle empty-state annotation
+        if payload["is_empty"]:
+            widget.layout.annotations = [
+                dict(
+                    text=lang_text("Data indeks panas tidak tersedia", "No heat index data available"),
+                    x=0.5,
+                    y=0.5,
+                    xref="paper",
+                    yref="paper",
+                    showarrow=False,
+                    font=dict(size=14, color="#666"),
+                )
+            ]
+        else:
+            widget.layout.annotations = []
+
+    @reactive.effect
+    def _update_city_summary_in_place():
+        data = app_data()
+        if data["error"] is not None:
+            return
+
+        times = forecast_times()
+        if not times:
+            return
+
+        selected_time = nearest_available_time(input.selected_time(), times)
+        if selected_time is None:
+            return
+
+        cities = city_order()
+        if not cities:
+            return
+
+        summary = city_summary_at_time(data["forecast_df"], selected_time)
+        payload = build_city_summary_payload(summary, cities)
+
+        widget = city_summary_plot.widget
+        if widget is None or len(widget.data) == 0:
+            return
+
+        metric_cols = ["temperature_c", "humidity_pct", "heat_index_c"]
+
+        trace_idx = 0
+        for metric_col in metric_cols:
+            for city_idx, _city in enumerate(cities):
+                widget.data[trace_idx].y = [payload[metric_col][city_idx]]
+                trace_idx += 1
+
     @output
     @render.ui
     def map_legend():
@@ -2071,17 +2194,14 @@ def server(input, output, session):
 
     @reactive.calc
     def heat_index_series_df():
-        df = selected_region_df()
-        if df.empty:
-            return pd.DataFrame(columns=["local_datetime", "heat_index_c"])
-
-        chart_df = (
-            df.groupby("local_datetime", as_index=False)["heat_index_c"]
-            .mean()
-            .sort_values("local_datetime")
-            .reset_index(drop=True)
-        )
-        return chart_df
+        return build_heat_index_series_df(selected_region_df())
+    
+    @reactive.calc
+    def city_order():
+        data = app_data()
+        if data["error"] is not None:
+            return []
+        return get_fixed_city_order(data["forecast_df"])
     
     @output
     @render.ui
@@ -2162,8 +2282,21 @@ def server(input, output, session):
     
     @render_widget
     def heat_index_evolution_plot():
+        data = app_data()
+        if data["error"] is not None:
+            fig = go.Figure()
+            fig.update_layout(
+                title=data["error"],
+                margin=dict(l=0, r=0, t=0, b=0),
+                height=220,
+            )
+            return fig
+
+        initial_df = build_heat_index_series_df(data["forecast_df"])
+        initial_payload = build_heat_index_payload(initial_df)
+
         return build_heat_index_plot(
-            heat_index_series_df(),
+            initial_payload=initial_payload,
             heat_index_label=tr("heat_index"),
             empty_label=lang_text("Data indeks panas tidak tersedia", "No heat index data available"),
             time_label=lang_text("Waktu", "Time"),
@@ -2171,8 +2304,39 @@ def server(input, output, session):
 
     @render_widget
     def city_summary_plot():
+        data = app_data()
+        if data["error"] is not None:
+            fig = go.Figure()
+            fig.update_layout(
+                title=data["error"],
+                margin=dict(l=0, r=0, t=0, b=0),
+                height=320,
+            )
+            return fig
+
+        times = forecast_times()
+        if not times:
+            return build_city_summary_plot(
+                city_order=[],
+                initial_payload={
+                    "temperature_c": [],
+                    "humidity_pct": [],
+                    "heat_index_c": [],
+                },
+                temperature_label=tr("temperature"),
+                humidity_label=tr("humidity"),
+                heat_index_label=tr("heat_index"),
+                empty_label=lang_text("Data ringkasan kota tidak tersedia", "No city summary data available"),
+            )
+
+        initial_time = pd.Timestamp(times[0])
+        cities = city_order()
+        initial_summary = city_summary_at_time(data["forecast_df"], initial_time)
+        initial_payload = build_city_summary_payload(initial_summary, cities)
+
         return build_city_summary_plot(
-            city_summary_df(),
+            city_order=cities,
+            initial_payload=initial_payload,
             temperature_label=tr("temperature"),
             humidity_label=tr("humidity"),
             heat_index_label=tr("heat_index"),
