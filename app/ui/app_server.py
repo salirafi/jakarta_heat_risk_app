@@ -423,7 +423,7 @@ def server(input, output, session):
                 ticks=False,
                 width="100%",
                 time_format="%b %d %Y, %H:%M",
-                timezone="+0700",
+                # timezone="+0700",
             ),
             ui.output_ui("selected_map_time_text"),
             class_="time-slider-wrap",
@@ -1069,4 +1069,5 @@ def server(input, output, session):
                 class_="footer-text"),
             class_="footer-section",
         )
+
 
