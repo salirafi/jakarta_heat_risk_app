@@ -36,8 +36,7 @@ def make_discrete_colorscale():
 
 def compute_map_bounds(boundary_gdf: gpd.GeoDataFrame):
     """
-    Compute a stable map center from bounding box only.
-    This avoids union_all(), which can fail on invalid geometries.
+    Compute a stable map center from bounding box only
     """
     if boundary_gdf.empty:
         return {"lon": 106.8456, "lat": -6.2088}
@@ -60,7 +59,7 @@ def build_time_payload(
     Build only the dynamic arrays that change with time:
     - z values (risk codes)
     - customdata for hover
-    The polygon geometry and locations stay fixed.
+    The polygon geometry and locations stay fixed
     """
     base_df = boundary_index_df.copy()
 
@@ -219,5 +218,6 @@ def legend_html(label_fn) -> str:
             </span>
             """
         )
+
 
     return "".join(parts)
