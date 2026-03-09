@@ -13,7 +13,7 @@ conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
 # list of SQL files and path
-files = ["/sql_tables/heat_forecast_jakarta.sql", "/sql_tables/jakarta_kelurahan_boundary.sql"]
+files = ["/tables/heat_forecast_jakarta.sql", "/tables/jakarta_kelurahan_boundary.sql"]
 
 for file in files:
     with open(file, "r") as f:
