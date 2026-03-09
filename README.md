@@ -38,6 +38,8 @@ shiny run .\app\app.py
 ```
 to connect to the web app.
 
+If the user wants to run [fetch_region_border_big_data_jakarta.py](src/fetch_region_border_big_data_jakarta.py), make sure they have downloaded the required .gdb file from [here](https://geoservices.big.go.id/portal/apps/webappviewer/index.html?id=cb58db080712468cb4bfd408dbde3d70).
+
 
 ## Notes
 
