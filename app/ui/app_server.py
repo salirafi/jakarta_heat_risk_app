@@ -246,7 +246,7 @@ def server(input, output, session):
         now_time = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
         # now_time = pd.Timestamp('2026-03-20 13:42:15.382917')
 
-        # if current time is outside table coverage, require manual selection
+        # If current time is outside table coverage, require manual selection
         if now_time < min_time or now_time > max_time:
 
             needs_manual_date.set(True)
@@ -268,7 +268,7 @@ def server(input, output, session):
             current_query_window.set(window)
             return
 
-        # current time is inside table coverage -> auto mode
+        # Current time is inside table coverage -> auto mode
         rounded_now = floor_to_time_step(now_time, step_hours=3)
         auto_start = get_nearest_available_start_time(rounded_now)
 
@@ -368,7 +368,9 @@ def server(input, output, session):
         if df.empty or not times:
             return pd.DataFrame()
 
-        selected_time = nearest_available_time(input.selected_time(), times)
+        raw_value = pd.Timestamp(input.selected_time()) + \
+            (pd.Timestamp.now() - pd.Timestamp.utcnow().tz_localize(None)) # this is fixing a bug in Shiny slider with datetime format; see https://github.com/posit-dev/py-shiny/issues/556?
+        selected_time = nearest_available_time(raw_value, times)
         if selected_time is None:
             return pd.DataFrame()
 
@@ -396,7 +398,7 @@ def server(input, output, session):
 
         if not times:
             return ui.p(
-                        lang_text("Tidak ada timestamp prakiraan yang valid.", "No valid forecast timestamps found."),
+                        lang_text("Tidak ada waktu prakiraan yang valid.", "No valid forecast timestamps found."),
                         class_="caption",
                     )
 
@@ -423,7 +425,7 @@ def server(input, output, session):
                 ticks=False,
                 width="100%",
                 time_format="%b %d %Y, %H:%M",
-                # timezone="+0700",
+                # timezone="+0000",
             ),
             ui.output_ui("selected_map_time_text"),
             class_="time-slider-wrap",
@@ -439,7 +441,8 @@ def server(input, output, session):
                 class_="map-time-caption",
             )
 
-        raw_value = input.selected_time()
+        raw_value = pd.Timestamp(input.selected_time()) + \
+            (pd.Timestamp.now() - pd.Timestamp.utcnow().tz_localize(None)) # this is fixing a bug in Shiny slider with datetime format; see https://github.com/posit-dev/py-shiny/issues/556?
         selected_time = nearest_available_time(raw_value, times)
 
         if selected_time is None:
@@ -450,7 +453,7 @@ def server(input, output, session):
 
         label = pd.Timestamp(selected_time).strftime("%b %d %Y, %H:%M")
         return ui.div(
-            lang_text(f"Waktu di peta: {label} WIB", f"Map time: {label} WIB"),
+            lang_text(f"Waktu di peta: {label} WIB", f"Map time: {raw_value} WIB"),
             class_="map-time-caption",
         )
 
@@ -511,7 +514,9 @@ def server(input, output, session):
         if not times:
             return
 
-        selected_time = nearest_available_time(input.selected_time(), times)
+        raw_value = pd.Timestamp(input.selected_time()) + \
+            (pd.Timestamp.now() - pd.Timestamp.utcnow().tz_localize(None)) # this is fixing a bug in Shiny slider with datetime format; see https://github.com/posit-dev/py-shiny/issues/556?
+        selected_time = nearest_available_time(raw_value, times)
         if selected_time is None:
             return
 
@@ -526,7 +531,7 @@ def server(input, output, session):
         if widget is None or len(widget.data) == 0:
             return
 
-        # update only dynamic trace data
+        # Update only dynamic trace data.
         widget.data[0].z = payload["z"]
         widget.data[0].customdata = payload["customdata"]
 
@@ -550,11 +555,14 @@ def server(input, output, session):
         widget.data[1].x = payload["x"]
         widget.data[1].y = payload["y_temp"]
 
+        # Update y-axis range
         widget.layout.yaxis.range = payload["y_range"]
 
+        # Toggle axes visibility
         widget.layout.xaxis.visible = not payload["is_empty"]
         widget.layout.yaxis.visible = not payload["is_empty"]
 
+        # Toggle empty-state annotation
         if payload["is_empty"]:
             widget.layout.annotations = [
                 dict(
@@ -580,7 +588,9 @@ def server(input, output, session):
         if not times:
             return
 
-        selected_time = nearest_available_time(input.selected_time(), times)
+        raw_value = pd.Timestamp(input.selected_time()) + \
+            (pd.Timestamp.now() - pd.Timestamp.utcnow().tz_localize(None)) # this is fixing a bug in Shiny slider with datetime format; see https://github.com/posit-dev/py-shiny/issues/556?
+        selected_time = nearest_available_time(raw_value, times)
         if selected_time is None:
             return
 
@@ -1069,5 +1079,3 @@ def server(input, output, session):
                 class_="footer-text"),
             class_="footer-section",
         )
-
-
