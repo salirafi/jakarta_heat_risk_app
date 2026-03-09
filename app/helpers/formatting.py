@@ -23,9 +23,9 @@ def metric_card_html(label: str, value: str, extra_class: str = "") -> str:
         <div class="metric-value">{value}</div>
     </div>
     """
-
 def short_city_name(name: str) -> str:
     if pd.isna(name):
         return ""
     name = str(name).strip()
+
     return name.replace("Kota Adm. ", "").replace("Kab. Adm. ", "")
