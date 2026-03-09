@@ -31,7 +31,7 @@ app_ui = ui.page_fluid(
                 output_widget("boundary_map"),
                 ui.output_ui("map_legend"),
                 ui.hr(style="margin: 0.8rem 0 0.8rem 0;"),
-                ui.div(
+                ui.div( # for flexible vertical stretching
                     ui.output_ui("avg_conditions_title"),
                     ui.output_ui("avg_conditions_note"),
                     output_widget("city_summary_plot"),
@@ -56,7 +56,7 @@ app_ui = ui.page_fluid(
                 ui.output_ui("future_forecast_title"),
                 ui.output_ui("future_forecast_cards_ui"),
                 ui.hr(style="margin: 1rem 0 0.8rem 0;"),
-                ui.div(
+                ui.div( # for flexible vertical stretching
                     ui.output_ui("heat_index_over_time_title"),
                     output_widget("heat_index_evolution_plot"),
                     class_="heat-index-section",
@@ -77,4 +77,5 @@ app_ui = ui.page_fluid(
     ui.output_ui("reference_ui"),
 
     ui.output_ui("footer_ui"),
+
 )
