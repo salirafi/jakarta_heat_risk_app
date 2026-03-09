@@ -4,7 +4,7 @@ This is for example.
 It is still useful to create .db file from either fetch_bmkg_data_jakarta.py or fetch_region_border_big_data_jakarta.py.
 """
 import sqlite3
-import Path
+from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "tables" / "heat_risk.db"
