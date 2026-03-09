@@ -65,7 +65,7 @@ LANG = {
         "heat_risk_guide": "Heat risk guide",
         "guide_intro": "Click a heat risk level below to see what it means and what actions to take. This guide is based on the ",
 
-        "footer_credit": "© Sayyed Ali Rafi (salirafi8@gmail.com)",
+        "footer_credit": "© Sayyed Ali Rafi",
 
         "reference_title": "Notes and References",
         "reference_content": """
@@ -210,3 +210,4 @@ HEAT_RISK_GUIDE = {
         },
     },
 }
+
