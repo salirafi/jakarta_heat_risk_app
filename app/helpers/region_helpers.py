@@ -6,7 +6,6 @@ def available_map_times(df: pd.DataFrame) -> list[pd.Timestamp]:
         return []
     return sorted(pd.to_datetime(df["local_datetime"]).dropna().unique().tolist())
 
-
 def infer_time_step(times: list[pd.Timestamp]):
     if len(times) < 2:
         return pd.Timedelta(hours=3)
@@ -16,7 +15,6 @@ def infer_time_step(times: list[pd.Timestamp]):
         return pd.Timedelta(hours=3)
 
     return diffs.mode().iloc[0]
-
 
 def nearest_available_time(selected_time, map_times: list[pd.Timestamp]):
     if not map_times:
@@ -101,4 +99,5 @@ def get_fixed_city_order(forecast_df: pd.DataFrame) -> list[str]:
         .unique()
         .tolist()
     )
+
     return [short_city_name(city) for city in cities]
