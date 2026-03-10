@@ -293,9 +293,6 @@ def server(input, output, session):
         if BOUNDARY_TABLE not in existing_tables:
             return {"error": lang_text(f"Tabel '{BOUNDARY_TABLE}' tidak ditemukan", f"Table '{BOUNDARY_TABLE}' was not found")}
 
-        if FORECAST_TABLE not in existing_tables:
-            return {"error": lang_text(f"Tabel '{FORECAST_TABLE}' tidak ditemukan", f"Table '{FORECAST_TABLE}' was not found")}
-
         boundary_gdf = load_boundary_data()
 
         window = current_query_window.get()
@@ -1128,4 +1125,5 @@ def server(input, output, session):
                 class_="footer-text"),
             class_="footer-section",
         )
+
 
