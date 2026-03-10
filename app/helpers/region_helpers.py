@@ -25,15 +25,17 @@ def nearest_available_time(selected_time, map_times: list[pd.Timestamp]):
 
     selected_time = pd.Timestamp(selected_time)
     return min(map_times, key=lambda t: abs(pd.Timestamp(t) - selected_time))
+    # return map_times[map_times == selected_time]
 
-def nearest_available_time_in_df(df: pd.DataFrame, now=None):
+def nearest_available_time_in_df(df: pd.DataFrame):
     times = available_map_times(df)
-    if not times:
-        return None
+    
+    # now = pd.Timestamp('2026-03-20 13:42:15.382917')
+    now = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
 
-    if now is None:
-        # now = pd.Timestamp('2026-03-20 13:42:15.382917')
-        now = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
+    # if no time stamp or current time is outside the timestamp coverage, return none
+    if not times or now < times[0] or now > times[-1]:
+        return None
 
     times = pd.to_datetime(pd.Series(times))
     nearest_idx = (times - now).abs().idxmin()
@@ -99,5 +101,4 @@ def get_fixed_city_order(forecast_df: pd.DataFrame) -> list[str]:
         .unique()
         .tolist()
     )
-
     return [short_city_name(city) for city in cities]
