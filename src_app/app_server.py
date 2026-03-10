@@ -453,7 +453,7 @@ def server(input, output, session):
 
         label = pd.Timestamp(selected_time).strftime("%b %d %Y, %H:%M")
         return ui.div(
-            lang_text(f"Waktu di peta: {label} WIB", f"Map time: {raw_value} WIB"),
+            lang_text(f"Waktu di peta: {label} WIB", f"Map time: {label} WIB"),
             class_="map-time-caption",
         )
 
@@ -1128,3 +1128,4 @@ def server(input, output, session):
                 class_="footer-text"),
             class_="footer-section",
         )
+
