@@ -1,7 +1,7 @@
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DB_PATH = BASE_DIR / "heat_risk.db"
+DB_PATH = BASE_DIR / "tables" / "heat_risk.db"
 BOUNDARY_TABLE = "ward_boundary_table_simplified"
 WEATHER_TABLE = "ward_weather_table"
 
@@ -95,4 +95,5 @@ HEAT_RISK_GUIDE = {
             "including overnight, use air conditioning if available, and check on neighbors or other vulnerable people."
         ),
     },
+
 }
