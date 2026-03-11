@@ -1,6 +1,6 @@
 # Jakarta Heat Risk App
 
-This repository contains the source code to build Python-based web application with Shiny for Python which is intended to show information about heat index and risk for every single ward (kelurahan) in the Jakarta province. The weather forecast data which includes temperature, humidity, sky condition, and wind speed and direction are available for each ward and are provided by Badan Meteorologi, Klimatologi, dan Geofisika (BMKG) through public API described in [Data Terbuka BMKG](https://data.bmkg.go.id/prakiraan-cuaca/).
+This repository contains the source code to build a simple Python-based web application prototype with Shiny for Python which is intended to show information about heat index and risk for every single ward (kelurahan) in the Jakarta province. The weather forecast data which includes temperature, humidity, sky condition, and wind speed and direction are available for each ward and are provided by Badan Meteorologi, Klimatologi, dan Geofisika (BMKG) through public API described in [Data Terbuka BMKG](https://data.bmkg.go.id/prakiraan-cuaca/).
 
 ## Content
 
