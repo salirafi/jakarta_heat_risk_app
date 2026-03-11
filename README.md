@@ -4,7 +4,7 @@ This repository contains the source code to build Python-based web application w
 
 ## Content
 
-This project is mostly based on Python, with data managed in SQLite environment. 
+This project depends heavily on [pandas](https://pandas.pydata.org/), with data managed in [SQLite](https://sqlite.org/) environment. 
 
 [fetch](fetch) contains source code for fetching BMKG data ([fetch_weather_data.py](fetch/fetch_weather_data.py)), retrieving region code from [public API](https://wilayah.id/api) ([build_jakarta_preference.py](fetch/build_jakarta_preference.py)), and reading the boundary polygons from RBI data provided by Badan Informasi Geospasial ([fetch_boundary_data.py](fetch/fetch_boundary_data.py)). The first and last file create SQLite tables with names `ward_weather_table` and `ward_boundary_table`, respectively, whilst the region code is saved as `jakarta_preference.csv`. Note that the only time-dependent data in this repository is the BMKG weather data, so the boundary polygon and region code will always be valid.
 
