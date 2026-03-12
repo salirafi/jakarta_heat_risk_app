@@ -28,7 +28,7 @@ python3 .\tables\create_db.py
 ```
 to create SQLite database file `heat_risk.db` in `tables` folder. 
 
-If the user wants up-to-date weather data, in the parent folder, run
+Then, if the user wants up-to-date weather data, in the parent folder, run
 ```
 python3 .\fetch\fetch_weather_data.py
 ```
