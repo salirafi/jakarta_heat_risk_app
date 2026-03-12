@@ -2,18 +2,6 @@
 
 This repository contains the source code to build a simple Python-based web application prototype with Shiny for Python which is intended to show information about heat index and risk for every single ward (kelurahan) in the Jakarta province. The weather forecast data which includes temperature, humidity, sky condition, and wind speed and direction are available for each ward and are provided by Badan Meteorologi, Klimatologi, dan Geofisika (BMKG) through public API described in [Data Terbuka BMKG](https://data.bmkg.go.id/prakiraan-cuaca/).
 
-## Content
-
-This project depends heavily on [pandas](https://pandas.pydata.org/), with data managed in [SQLite](https://sqlite.org/) environment. Though, no SQLite broswer needs to be installed since all interface is done with Python.
-
-[fetch](fetch) contains source code for fetching BMKG data ([fetch_weather_data.py](fetch/fetch_weather_data.py)), retrieving region code from [public API](https://wilayah.id/api) ([build_jakarta_preference.py](fetch/build_jakarta_preference.py)), and reading the boundary polygons from RBI data provided by Badan Informasi Geospasial ([fetch_boundary_data.py](fetch/fetch_boundary_data.py)). The first and last file create SQLite tables with names `ward_weather_table` and `ward_boundary_table`, respectively, whilst the region code is saved as `jakarta_preference.csv`. Note that the only time-dependent data in this repository is the BMKG weather data, so the boundary polygon and region code will always be valid.
-
-[tables](tables) contains SQLite table for boundary polygon and weather data in `heat_risk.db`. The weather data time coverage spans from March 11 2026 20:00 WIB to March 13 2026 20:00 WIB. User can update, or more precisely append, this data by simply running [fetch_weather_data.py](fetch/fetch_weather_data.py) which will append the table with weather data from the user's current time to three days in the future. If there is overlap, the code will replace the old rows (with the same region code and time stamp). Each run will take up about 4 minutes due to polite delay of 1.01 seconds for each of 261 wards in Jakarta to respect BMKG request limit of 60 requests / minute / IP. The file also contains `create_db.py` to create a SQLite database named `heat_risk.db`.
-
-[src](src) contains the source code for creating the web app, making use of [Shiny for Python](https://shiny.posit.co/py/).
-
-The parent folder contains [app.py](app.py), script to run the web app.
-
 ## Running
 
 This code can be run with `python3.11`. Before running the code, make sure all prerequisites are installed. Run in the terminal
@@ -36,7 +24,7 @@ or, if the user uses Windows, alternatively type in terminal
 ```
 fetch_weather_data.bat
 ```
-or simply double-click it to run the script through .bat file. This might run for around 4 to 5 minutes.
+or simply double-click it to run the script through .bat file. This might run for around 4 to 5 minutes (see Content section).
 
 Finally, run
 ```
@@ -51,6 +39,18 @@ Please note that the web app shows the weather forecast from roughly the user's 
 If the user wants to run [fetch_boundary_data.py](src/fetch_boundary_data.py), make sure they have downloaded the required .gdb file from [here](https://geoservices.big.go.id/portal/apps/webappviewer/index.html?id=cb58db080712468cb4bfd408dbde3d70).
 
 ⚠️ **IMPORTANT!** ⚠️  This app is a personal project, so the code might not be optimized to smoother user's experience (preparation of table data for visualization is done within the pandas framework, not pre-computed in SQL). For first time loading, the web might take a few seconds.
+
+## Content
+
+This project depends heavily on [pandas](https://pandas.pydata.org/), with data managed in [SQLite](https://sqlite.org/) environment. Though, no SQLite broswer needs to be installed since all interface is done with Python.
+
+[fetch](fetch) contains source code for fetching BMKG data ([fetch_weather_data.py](fetch/fetch_weather_data.py)), retrieving region code from [public API](https://wilayah.id/api) ([build_jakarta_preference.py](fetch/build_jakarta_preference.py)), and reading the boundary polygons from RBI data provided by Badan Informasi Geospasial ([fetch_boundary_data.py](fetch/fetch_boundary_data.py)). The first and last file create SQLite tables with names `ward_weather_table` and `ward_boundary_table`, respectively, whilst the region code is saved as `jakarta_preference.csv`. Note that the only time-dependent data in this repository is the BMKG weather data, so the boundary polygon and region code will always be valid.
+
+[tables](tables) contains SQLite table for boundary polygon and weather data in `heat_risk.db`. The weather data time coverage spans from March 11 2026 20:00 WIB to March 13 2026 20:00 WIB. User can update, or more precisely append, this data by simply running [fetch_weather_data.py](fetch/fetch_weather_data.py) which will append the table with weather data from the user's current time to three days in the future. If there is overlap, the code will replace the old rows (with the same region code and time stamp). Each run will take up about 4 minutes due to polite delay of 1.01 seconds for each of 261 wards in Jakarta to respect BMKG request limit of 60 requests / minute / IP. The file also contains `create_db.py` to create a SQLite database named `heat_risk.db`.
+
+[src](src) contains the source code for creating the web app, making use of [Shiny for Python](https://shiny.posit.co/py/).
+
+The parent folder contains [app.py](app.py), script to run the web app.
 
 
 ## Author's Remarks
