@@ -36,13 +36,15 @@ or, if the user uses Windows, alternatively type in terminal
 ```
 fetch_weather_data.bat
 ```
-or simply double-click it to run the script through .bat file. Note that this might run for a while. If the database is not up-to-date (the database time coverage does not cover the current Jakarta time), then the app pops out a blocker notification prompting the user to update the database.
+or simply double-click it to run the script through .bat file. This might run for around 4 to 5 minutes.
 
 Finally, run
 ```
 shiny run app.py
 ```
-to connect to the web app. Please note that the web app shows the weather forecast from roughly the user's current system time up to 1 day (by default) to the future whenever data is available. Also note that first time loading the web might take a few seconds.
+to connect to the web app. 
+
+Please note that the web app shows the weather forecast from roughly the user's current system time up to 1 day (by default) to the future whenever data is available. If the database is not up-to-date (the database time coverage does not cover the current Jakarta time), then the app pops out a blocker notification prompting the user to update the database. Also note that for first time loading, the web might take a few seconds.
 
 If the user wants to run [fetch_boundary_data.py](src/fetch_boundary_data.py), make sure they have downloaded the required .gdb file from [here](https://geoservices.big.go.id/portal/apps/webappviewer/index.html?id=cb58db080712468cb4bfd408dbde3d70).
 
