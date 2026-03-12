@@ -14,6 +14,12 @@ from src.constant import BASE_DIR, DB_PATH, BOUNDARY_TABLE, WEATHER_TABLE, CITY_
 from src.helpers import *
 from src.plotting import *
 
+# load data
+boundary_index, boundary_json = load_boundary_data() # pd.DataFrame and JSON dict
+
+# definition of current_time
+current_time = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
+
 app_ui = ui.page_fluid(
 
     # ui.tags.link(href="styles.css", rel="stylesheet"),
@@ -91,12 +97,13 @@ app_ui = ui.page_fluid(
         )
 )
 
-def server(input, output, _):
+def server(input, output, session):
+
+    conn = sqlite3.connect(DB_PATH)
 
     # setting default query time window from current system's time to a day after; UTC+7
     #!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!
     # this pipeline assumes that the 'current time' is the start_time (which defaults to the user's current system time)
-    current_time = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
     query_window = reactive.Value({"start_time": current_time, # reactive value used; when it changes, all process downstreams invalidated
                                     "end_time": current_time + pd.Timedelta(days=1.0)
                                     })
@@ -109,7 +116,7 @@ def server(input, output, _):
             return {"status": "missing_db"}
 
         # check if table exists
-        existing_tables = set(get_table_names())
+        existing_tables = set(get_table_names(conn))
         if BOUNDARY_TABLE not in existing_tables:
             return {"status": "missing_boundary_table"}
         if WEATHER_TABLE not in existing_tables:
@@ -117,7 +124,7 @@ def server(input, output, _):
 
         try:
             # getting min max time from database to # check if user's time is outside the range of database timestamp coverage
-            with sqlite3.connect(DB_PATH) as conn:
+            with sqlite3.connect(DB_PATH) as conne:
                 row = pd.read_sql_query(
                     f"""
                     SELECT
@@ -125,7 +132,7 @@ def server(input, output, _):
                         MAX(local_datetime) AS max_ts
                     FROM {WEATHER_TABLE}
                     """,
-                    conn,
+                    conne,
                 ).iloc[0]
 
             min_ts = pd.to_datetime(row["min_ts"])
@@ -226,45 +233,33 @@ def server(input, output, _):
             footer=None,
         )
         ui.modal_show(modal)
-    
-    @reactive.calc
-    def load_data():
-
-        # load data
-        boundary_index, boundary_json = load_boundary_data() # pd.DataFrame and JSON dict
-
-        return {
-            "boundary_json": boundary_json,
-            "boundary_index": boundary_index,
-        }
 
     @reactive.calc
     def forecast_times():
         window = query_window.get()
         start_time = pd.to_datetime(window.get("start_time")) - pd.Timedelta(hours=3.0) # add some margin for boundary timestamps
         end_time = pd.to_datetime(window.get("end_time")) + pd.Timedelta(hours=3.0)
-        return available_timestamps(start_time, end_time) # output all available timestamps from the data given the range
-
+        return available_timestamps(start_time, end_time, conn) # output all available timestamps from the data given the range
+    
     # create map figure
     @render_widget
     def heat_risk_map():
 
-        data = load_data()
-
         times = forecast_times() # list of unique timestamps in data["weather_df"]
         if not times:
             return ui.div("No available data", class_='city-summary-note')
-        selected_time = times[int(len(times)/2)] # initial timestamp to show (first timestamp in data)
+        selected_time = times[int(len(times)/2)] # initial average value for first timestamp
 
         # slicing created grouped dictionary at selected_time
         colormap = create_dynamic_colormap(
-            boundary_index=data["boundary_index"],
+            boundary_index=boundary_index,
             selected_time=selected_time,
+            conn=conn,
         )
 
         return build_map_figure(
-                boundary_geojson=data["boundary_json"],
-                locations=data["boundary_index"]["adm4"].tolist(),
+                boundary_geojson=boundary_json,
+                locations=boundary_index["adm4"].tolist(),
                 colormap=colormap,
             )
 
@@ -277,7 +272,8 @@ def server(input, output, _):
             return ui.div("No available data", class_='city-summary-note')
 
         initial_summary = city_summary_at_time(
-                            selected_time=times[0], # initial average value for first timestamp
+                            selected_time=times[int(len(times)/2)], # initial average value for first timestamp
+                            conn=conn,
                             )
 
         return build_city_summary_plot(
@@ -332,7 +328,7 @@ def server(input, output, _):
     @output
     @render.ui
     def city_ui():
-        choices = city_options() # for city-level, no prior_mask
+        choices = city_options(conn) # for city-level, no prior_mask
         return ui.div(
             ui.input_select(
                 "selected_city",
@@ -350,7 +346,7 @@ def server(input, output, _):
         if not selected_city:
             choices = []
         else:
-            choices = subdistrict_options(selected_city)
+            choices = subdistrict_options(selected_city, conn)
         return ui.div(
             ui.input_select(
                 "selected_subdistrict",
@@ -367,7 +363,7 @@ def server(input, output, _):
         selected_city = input.selected_city()
         selected_subdistrict = input.selected_subdistrict()
         if selected_city and selected_subdistrict:
-            choices = ward_options(selected_city, selected_subdistrict)
+            choices = ward_options(selected_city, selected_subdistrict, conn)
         else:
             choices = []
         return ui.div(
@@ -390,12 +386,14 @@ def server(input, output, _):
     def current_snapshot(): # get the weather data for selected region and time
         region_code = ward_final_selection(input.selected_city(), 
                                            input.selected_subdistrict(), 
-                                           input.selected_ward()
+                                           input.selected_ward(),
+                                           conn,
                                            )
         current_time_df = current_time_for_metrics()
         return current_condition( # this ideally should output a database with only one row since timestamp and region code are the unique parameters
             region_code,
             current_time_df,
+            conn,
             )
 
     @output
@@ -445,7 +443,8 @@ def server(input, output, _):
         
         region_code = ward_final_selection(selected_city, 
                                         selected_subdistrict, 
-                                        selected_ward
+                                        selected_ward,
+                                        conn,
                                         )
         
         if region_code is None:
@@ -457,6 +456,7 @@ def server(input, output, _):
             region_code,
             current_time_df,
             end_time,
+            conn,
             )
 
     @output
@@ -503,11 +503,12 @@ def server(input, output, _):
         region_code = ward_final_selection("Kota Adm. Jakarta Barat", 
                                 "Cengkareng", 
                                 "Cengkareng Barat",
+                                conn,
                                 )
         current_time_df = current_time_for_metrics() # as starting time
         end_time = query_window.get().get("end_time")
         
-        df = future_forecast(region_code, current_time_df, end_time)
+        df = future_forecast(region_code, current_time_df, end_time, conn)
         evolution_values = create_heat_index_arr(df)
 
         return build_heat_index_plot(
@@ -527,15 +528,15 @@ def server(input, output, _):
     @reactive.effect
     def _update_map_in_place():
 
-        data = load_data()
         selected_time =  pd.Timestamp(input.selected_time())
         if selected_time is None:
             return
 
         # slicing created grouped dictionary at selected_time
         colormap = create_dynamic_colormap(
-            boundary_index=data["boundary_index"],
+            boundary_index=boundary_index,
             selected_time=selected_time,
+            conn=conn,
         )
 
         widget = heat_risk_map.widget
@@ -556,6 +557,7 @@ def server(input, output, _):
         # slicing created grouped dictionary at selected_time
         timestamp_summary = city_summary_at_time(
                             selected_time=selected_time, # initial average value for first timestamp
+                            conn=conn,
                             )
 
         widget = getattr(city_summary_plot, "widget", None)
@@ -579,6 +581,10 @@ def server(input, output, _):
         evolution_values = create_heat_index_arr(df)
 
         widget = heat_index_evolution_plot.widget
+
+        widget = getattr(heat_index_evolution_plot, "widget", None)
+        if widget is None or len(widget.data) < 2:
+            return
 
         # update the color map but the boundary polygon stays
         widget.data[0].x = evolution_values["x"]
@@ -727,6 +733,8 @@ def server(input, output, _):
             ),
             style="margin-top: 1.5rem; margin-bottom: 0.5rem"
         )
+    
+    session.on_ended(lambda: conn.close())
 
 
 app = App(app_ui, server)
