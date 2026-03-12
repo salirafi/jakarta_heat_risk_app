@@ -3,7 +3,7 @@ import pandas as pd
 import json
 from html import escape
 
-from .constant import DB_PATH, BOUNDARY_GEOJSON_PATH, WEATHER_TABLE, CITY_SUMMARY_TABLE
+from .constant import DB_PATH, BOUNDARY_GEOJSON_PATH, WEATHER_TABLE
 
 def guide_button_id(level: str) -> str:
     return {
@@ -57,16 +57,12 @@ def hex_to_rgba_css(hex_color: str, alpha: float = 0.18) -> str:
     b = int(hex_color[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
-def run_query(query: str) -> pd.DataFrame:
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        return pd.read_sql_query(query,conn)
-    finally:
-        conn.close()
+def run_query(query: str, conn: sqlite3.Connection) -> pd.DataFrame:
+    return pd.read_sql_query(query, conn)
 
 # function to get name of all tables in sqlite database
-def get_table_names() -> list[str]:
-    tables = run_query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+def get_table_names(conn) -> list[str]:
+    tables = run_query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name", conn)
     return tables["name"].tolist()
 
 # function to load boundary data from boundary table
@@ -87,40 +83,8 @@ def load_boundary_data() -> tuple[pd.DataFrame, dict]:
 
     return boundary_index, geojson
 
-# function to load weather data from weather table
-def load_weather_data(start_time: pd.Timestamp, end_time: pd.Timestamp) -> pd.DataFrame:
-
-    start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
-    end_time = end_time.strftime("%Y-%m-%d %H:%M:%S")
-
-    # return only relevant columns
-    query = f"""
-            SELECT
-                adm4,
-                desa_kelurahan,
-                kecamatan,
-                kota_kabupaten,
-                local_datetime,
-                temperature_c,
-                humidity_ptg,
-                heat_index_c,
-                risk_level,
-                weather_desc
-            FROM {WEATHER_TABLE}
-            WHERE local_datetime BETWEEN '{start_time}' AND '{end_time}'
-            """
-    df = run_query(query)
-
-    if df.empty: 
-        return df # return empty df is df is empty
-
-    # convert to panda's datetime since the SQL's date is initially string
-    df["local_datetime"] = pd.to_datetime(df["local_datetime"], errors="coerce") # output -> Series of datetime.datetime
-
-    return df # comparing to the boundary table, the shared column is adm4
-
 # get unique timestamp values in weather data
-def available_timestamps(start_time: pd.Timestamp, end_time: pd.Timestamp) -> list[pd.Timestamp]:
+def available_timestamps(start_time: pd.Timestamp, end_time: pd.Timestamp, conn) -> list[pd.Timestamp]:
     query = f"""
         SELECT DISTINCT local_datetime
         FROM {WEATHER_TABLE}
@@ -128,7 +92,7 @@ def available_timestamps(start_time: pd.Timestamp, end_time: pd.Timestamp) -> li
           AND local_datetime <= '{end_time}'
         ORDER BY local_datetime
     """
-    df = run_query(query)
+    df = run_query(query, conn)
 
     if df.empty:
         return []
@@ -136,7 +100,7 @@ def available_timestamps(start_time: pd.Timestamp, end_time: pd.Timestamp) -> li
     return pd.to_datetime(df["local_datetime"]).tolist() # list of pd.Timestamp sorted
 
 # functions to get available options for region filtering
-def city_options() -> list[str]: # fory city-level
+def city_options(conn) -> list[str]: # fory city-level
     query = f"""
         SELECT DISTINCT kota_kabupaten
         FROM {WEATHER_TABLE}
@@ -144,11 +108,11 @@ def city_options() -> list[str]: # fory city-level
           AND TRIM(kota_kabupaten) != ''
         ORDER BY kota_kabupaten
     """
-    df = run_query(query)
+    df = run_query(query, conn)
     if df.empty:
         return []
     return df["kota_kabupaten"].astype(str).str.strip().tolist()
-def subdistrict_options(selected_city: str) -> list[str]: # for subdistrict-level
+def subdistrict_options(selected_city: str, conn) -> list[str]: # for subdistrict-level
     query = f"""
         SELECT DISTINCT kecamatan
         FROM {WEATHER_TABLE}
@@ -157,11 +121,11 @@ def subdistrict_options(selected_city: str) -> list[str]: # for subdistrict-leve
           AND TRIM(kecamatan) != ''
         ORDER BY kecamatan
     """
-    df = run_query(query)
+    df = run_query(query, conn)
     if df.empty:
         return []
     return df["kecamatan"].astype(str).str.strip().tolist()
-def ward_options(selected_city: str, selected_subdistrict: str) -> list[str]: # for ward-level
+def ward_options(selected_city: str, selected_subdistrict: str, conn) -> list[str]: # for ward-level
     query = f"""
         SELECT DISTINCT desa_kelurahan
         FROM {WEATHER_TABLE}
@@ -171,13 +135,13 @@ def ward_options(selected_city: str, selected_subdistrict: str) -> list[str]: # 
           AND TRIM(kecamatan) != ''
         ORDER BY kecamatan
     """
-    df = run_query(query)
+    df = run_query(query, conn)
     if df.empty:
         return []
     return df["desa_kelurahan"].astype(str).str.strip().tolist()
 
 # function to get the region code for the selected region for filtering the database to the selected reigion
-def ward_final_selection(selected_city: str, selected_subdistrict: str, selected_ward: str) -> str | None:
+def ward_final_selection(selected_city: str, selected_subdistrict: str, selected_ward: str, conn) -> str | None:
     query = f"""
         SELECT adm4
         FROM {WEATHER_TABLE}
@@ -187,14 +151,14 @@ def ward_final_selection(selected_city: str, selected_subdistrict: str, selected
         ORDER BY local_datetime
         LIMIT 1
     """
-    df = run_query(query)
+    df = run_query(query, conn)
     if df.empty:
         return None
     value = df.iloc[0]["adm4"] # get the code
     return str(value).strip()
 
 # selecting rows with the filtered-region and (current) time
-def current_condition(adm4: str, current_time: pd.Timestamp) -> pd.DataFrame:
+def current_condition(adm4: str, current_time: pd.Timestamp, conn) -> pd.DataFrame:
     query = f"""
         SELECT *
         FROM {WEATHER_TABLE}
@@ -203,7 +167,7 @@ def current_condition(adm4: str, current_time: pd.Timestamp) -> pd.DataFrame:
         ORDER BY local_datetime DESC
         LIMIT 1
     """
-    df = run_query(query)
+    df = run_query(query, conn)
 
     if df.empty:
         return df
@@ -212,7 +176,7 @@ def current_condition(adm4: str, current_time: pd.Timestamp) -> pd.DataFrame:
     return df
 
 # function to query future weather data relative to current time
-def future_forecast(adm4: str, current_time: pd.Timestamp, end_time: pd.Timestamp) -> pd.DataFrame:
+def future_forecast(adm4: str, current_time: pd.Timestamp, end_time: pd.Timestamp, conn) -> pd.DataFrame:
     query = f"""
         SELECT *
         FROM {WEATHER_TABLE}
@@ -221,7 +185,7 @@ def future_forecast(adm4: str, current_time: pd.Timestamp, end_time: pd.Timestam
                                 AND '{end_time.strftime("%Y-%m-%d %H:%M:%S")}'
         ORDER BY local_datetime
     """
-    df = run_query(query)
+    df = run_query(query, conn)
 
     if df.empty:
         return df

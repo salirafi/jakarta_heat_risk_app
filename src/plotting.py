@@ -94,25 +94,25 @@ def make_discrete_colorscale():
 def create_dynamic_colormap(
     boundary_index: pd.DataFrame,
     selected_time: pd.Timestamp, # time selected from the slider
+    conn,
 ):
     
     selected_time = pd.to_datetime(selected_time)
     
     query = f"""
-        SELECT adm4, desa_kelurahan, kecamatan, kota_kabupaten,
-            local_datetime, heat_index_c, temperature_c, humidity_ptg, risk_level, weather_desc
+        SELECT adm4, desa_kelurahan, kecamatan,
+            local_datetime, heat_index_c, temperature_c, risk_level, weather_desc
         FROM {WEATHER_TABLE}
         WHERE local_datetime = '{selected_time}'
         """
 
     index_df = boundary_index.copy() # dataframe for region/boundary index
-    time_df = run_query(query)
+    time_df = run_query(query, conn)
 
     merged = index_df.merge(time_df, on="adm4", how="left") # merge based on region code adm4
     merged["risk_level"] = merged["risk_level"].fillna("No Data") # if no data on risk_level, fill with "No Data"
     merged["desa_kelurahan"] = merged["desa_kelurahan"].fillna("")
     merged["kecamatan"] = merged["kecamatan"].fillna("")
-    merged["kota_kabupaten"] = merged["kota_kabupaten"].fillna("")
     merged["weather_desc"] = merged["weather_desc"].fillna("")
     merged["local_datetime"] = merged["local_datetime"].apply(format_timestamp)
 
@@ -122,13 +122,9 @@ def create_dynamic_colormap(
     # saving data for hover text on the map
     customdata = np.column_stack(
         [
-            merged["adm4"].astype(str).to_numpy(),
             merged["desa_kelurahan"].astype(str).to_numpy(),
             merged["kecamatan"].astype(str).to_numpy(),
-            merged["kota_kabupaten"].astype(str).to_numpy(),
             merged["local_datetime"].astype(str).to_numpy(),
-            merged["temperature_c"].to_numpy(dtype=object),
-            merged["humidity_ptg"].to_numpy(dtype=object),
             merged["heat_index_c"].to_numpy(dtype=object),
             merged["risk_level"].astype(str).to_numpy(),
             merged["weather_desc"].astype(str).to_numpy(),
@@ -278,6 +274,7 @@ def build_city_summary_plot(
 # the summary dataframe is then converted to a dictionary of lists ordered by CITY_ORDER
 def city_summary_at_time(
     selected_time: pd.Timestamp,
+    conn,
 ) -> dict[list]:
 
     selected_time = pd.to_datetime(selected_time)
@@ -290,7 +287,7 @@ def city_summary_at_time(
         WHERE local_datetime = '{selected_time}'
         ORDER BY kota_kabupaten
         """
-    summary = run_query(query)
+    summary = run_query(query, conn)
 
     summary["city_short_name"] = summary["kota_kabupaten"].apply(short_city_name) # shorten city name to fit the plot neatly
     summary_map = summary.set_index("city_short_name")[metric_cols].to_dict(orient="index")
