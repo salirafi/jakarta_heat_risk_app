@@ -120,12 +120,6 @@ def create_dynamic_colormap(
 
     index_df = boundary_index.copy() # dataframe for region/boundary index
     time_df = weather_lookup.get(selected_time)
-    if time_df is None or time_df.empty:
-        time_df = pd.DataFrame(columns=[
-            "adm4", "desa_kelurahan", "kecamatan", "kota_kabupaten",
-            "local_datetime", "temperature_c", "humidity_ptg",
-            "heat_index_c", "risk_level", "weather_desc"
-        ])
 
     merged = index_df.merge(time_df, on="adm4", how="left") # merge based on region code adm4
     merged["risk_level"] = merged["risk_level"].fillna("No Data") # if no data on risk_level, fill with "No Data"
@@ -303,14 +297,6 @@ def city_summary_at_time(
     time_df = weather_lookup.get(selected_time) # dataframe at selected_time
     metric_cols = ["avg_temperature_c", "avg_humidity_ptg", "avg_heat_index_c"]
 
-    if time_df is None or time_df.empty:
-        return {
-            "avg_temperature_c": [None for _ in CITY_ORDER],
-            "avg_humidity_ptg": [None for _ in CITY_ORDER],
-            "avg_heat_index_c": [None for _ in CITY_ORDER],
-            "local_datetime": selected_time.strftime("%b %d %H:%M") if selected_time is not None else "",
-        }
-
     summary = (
         time_df.groupby("kota_kabupaten", as_index=False) # group by cities' name
         .agg( # perform aggregate function (mean) to each parameter for each city
@@ -434,14 +420,6 @@ def build_heat_index_plot(
 def create_heat_index_arr(df: pd.DataFrame) -> dict:
 
     df = df.copy()
-    if df.empty:
-        return {
-            "x": [],
-            "y_hi": [],
-            "y_temp": [],
-            "y_range": [0, 1],
-            "is_empty": True,
-        }
     df["local_datetime"] = pd.to_datetime(df["local_datetime"], errors="coerce")
 
     x_ = np.array(df["local_datetime"].dt.to_pydatetime()) # .to_pydatetime() returns datetime objects instead ndarray

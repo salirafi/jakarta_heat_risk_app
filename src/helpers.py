@@ -150,8 +150,6 @@ def load_weather_data(start_time: pd.Timestamp, end_time: pd.Timestamp) -> pd.Da
 
 # get unique timestamp values in weather data
 def available_times_in_data(df: pd.DataFrame) -> list[pd.Timestamp]:
-    if df.empty or "local_datetime" not in df.columns:
-        return []
     return sorted(df["local_datetime"].dropna().unique().tolist()) # list of pd.Timestamp sorted
 
 # get the nearest time in region filtered df to the current time
@@ -169,8 +167,6 @@ def nearest_available_time_in_df(df: pd.DataFrame, current_time: pd.Timestamp):
 
 # filtering region-filtered df to the selected time
 def weather_at_selected_time(df: pd.DataFrame, selected_time:pd.Timestamp) -> pd.DataFrame:
-    if df.empty or selected_time is None:
-        return df.iloc[0:0].copy()
     out = df[df["local_datetime"] == selected_time]
     return out
     # return (
@@ -185,9 +181,6 @@ def region_filter_options(
     column: str,
     prior_mask: pd.Series | None = None,
 ) -> list[str]:
-
-    if df.empty or column not in df.columns:
-        return []
 
     subset = df if prior_mask is None else df[prior_mask]
     if subset.empty:
