@@ -1,7 +1,7 @@
 '''
 Source code to create the web app.
 Note that the pipeline of the code, in default, does not allow outputs of past weather data.
-This can be changed by changing default_start_time variable, but note that the definition of 'current time' will not mean the present time anymore. See current_time_for_metrics().
+This can be changed by changing current_time variable, but note that the definition of 'current time' will not mean the present time anymore.
 '''
 
 from shiny import ui, App, reactive, render
@@ -10,14 +10,14 @@ import pandas as pd
 from html import escape
 import sqlite3
 
-from src.constant import DB_PATH, BOUNDARY_TABLE, WEATHER_TABLE, CITY_ORDER, HEAT_RISK_GUIDE
+from src.constant import BASE_DIR, DB_PATH, BOUNDARY_TABLE, WEATHER_TABLE, CITY_ORDER, HEAT_RISK_GUIDE
 from src.helpers import *
 from src.plotting import *
 
 app_ui = ui.page_fluid(
 
     # ui.tags.link(href="styles.css", rel="stylesheet"),
-    ui.head_content(ui.include_css("styles.css")),
+    ui.head_content(ui.include_css(BASE_DIR / "styles.css")),
 
     ui.div(
         ui.div("Jakarta's Heat Risk Map and Forecast", class_="page-title"),
@@ -39,11 +39,12 @@ app_ui = ui.page_fluid(
                 ui.output_ui("current_metrics_ui"),
                 # ui.output_ui("test"),
                 ui.hr(style="margin: 1rem 0 0.8rem 0;"),
-                ui.h3("Future forecast", class_="panel-subtitle"),
+                # ui.h3("Future forecast", class_="panel-subtitle"),
+                ui.output_ui("future_forecast_caption"),
                 ui.output_ui("future_forecast_cards_ui"),
-                ui.hr(style="margin: 1rem 0 0.8rem 0;"),
+                # ui.hr(style="margin: 1rem 0 0.8rem 0;"),
                 ui.div(
-                    ui.output_ui("heat_evolution_caption"),
+                    # ui.output_ui("heat_evolution_caption"),
                     output_widget("heat_index_evolution_plot"),
                     class_="heat-index-section",
                 ),
@@ -93,9 +94,11 @@ app_ui = ui.page_fluid(
 def server(input, output, _):
 
     # setting default query time window from current system's time to a day after; UTC+7
-    default_start_time = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
-    query_window = reactive.Value({"start_time": default_start_time, # reactive value used; when it changes, all process downstreams invalidated
-                                    "end_time": default_start_time + pd.Timedelta(days=1.0)
+    #!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!
+    # this pipeline assumes that the 'current time' is the start_time (which defaults to the user's current system time)
+    current_time = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
+    query_window = reactive.Value({"start_time": current_time, # reactive value used; when it changes, all process downstreams invalidated
+                                    "end_time": current_time + pd.Timedelta(days=1.0)
                                     })
 
     @reactive.calc
@@ -131,14 +134,14 @@ def server(input, output, _):
             if pd.isna(min_ts) or pd.isna(max_ts):
                 return {"status": "empty_weather_table"}
 
-            now_local = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
+            now_local = pd.to_datetime(current_time)
 
             return {
                 "status": "ok",
                 "min_ts": min_ts,
                 "max_ts": max_ts,
                 "now": now_local,
-                "is_outdated": now_local < min_ts or now_local > max_ts,
+                "is_outdated": now_local + pd.Timedelta(hours=3.0) < min_ts or now_local > max_ts,
             }
 
         except Exception as e:
@@ -227,40 +230,20 @@ def server(input, output, _):
     @reactive.calc
     def load_data():
 
-        # assign query window
-        window = query_window.get()
-        start_time = window.get("start_time")
-        end_time = window.get("end_time").ceil(freq='h')
-
-        # make sure to include data closes to current time (3-hourly data)
-        start_time_input = start_time.floor(freq='h') - pd.Timedelta(hours=3.0) 
-        end_time_input = end_time.ceil(freq='h') + pd.Timedelta(hours=3.0)
-
         # load data
-        weather_data = load_weather_data(start_time_input, end_time_input) # pd.DataFrame
-        boundary_data, boundary_json = load_boundary_data() # gpd.GeoDataFrame and JSON dict
-
-        # indexing region code for choropleth plotting
-        boundary_index = boundary_data[["adm4"]].copy().sort_values("adm4").reset_index(drop=True) # pd.DataFrame
+        boundary_index, boundary_json = load_boundary_data() # pd.DataFrame and JSON dict
 
         return {
-            "boundary_gdf": boundary_data,
             "boundary_json": boundary_json,
             "boundary_index": boundary_index,
-            "weather_df": weather_data,
-            "query_start_time": start_time,
-            "query_end_time": end_time,
         }
 
     @reactive.calc
-    def weather_data_lookup():
-        data = load_data()
-        return build_weather_data_lookup(data["weather_df"])
-
-    @reactive.calc
     def forecast_times():
-        data = load_data()
-        return available_times_in_data(data["weather_df"])
+        window = query_window.get()
+        start_time = pd.to_datetime(window.get("start_time")) - pd.Timedelta(hours=3.0) # add some margin for boundary timestamps
+        end_time = pd.to_datetime(window.get("end_time")) + pd.Timedelta(hours=3.0)
+        return available_timestamps(start_time, end_time) # output all available timestamps from the data given the range
 
     # create map figure
     @render_widget
@@ -271,12 +254,11 @@ def server(input, output, _):
         times = forecast_times() # list of unique timestamps in data["weather_df"]
         if not times:
             return ui.div("No available data", class_='city-summary-note')
-        selected_time = times[0] # initial timestamp to show (first timestamp in data)
+        selected_time = times[int(len(times)/2)] # initial timestamp to show (first timestamp in data)
 
         # slicing created grouped dictionary at selected_time
         colormap = create_dynamic_colormap(
             boundary_index=data["boundary_index"],
-            weather_lookup=weather_data_lookup(),
             selected_time=selected_time,
         )
 
@@ -296,7 +278,6 @@ def server(input, output, _):
 
         initial_summary = city_summary_at_time(
                             selected_time=times[0], # initial average value for first timestamp
-                            weather_lookup=weather_data_lookup(),
                             )
 
         return build_city_summary_plot(
@@ -351,11 +332,7 @@ def server(input, output, _):
     @output
     @render.ui
     def city_ui():
-
-        data = load_data()
-
-        choices = region_filter_options(data["weather_df"], "kota_kabupaten") # for city-level, no prior_mask
-        
+        choices = city_options() # for city-level, no prior_mask
         return ui.div(
             ui.input_select(
                 "selected_city",
@@ -369,17 +346,11 @@ def server(input, output, _):
     @output
     @render.ui
     def subdistrict_ui():
-
-        data = load_data()
-        df = data["weather_df"]
-
         selected_city = input.selected_city()
         if not selected_city:
             choices = []
         else:
-            mask_city = df["kota_kabupaten"] == selected_city # mask district based on selected city
-            choices = region_filter_options(df, "kecamatan", prior_mask=mask_city)
-
+            choices = subdistrict_options(selected_city)
         return ui.div(
             ui.input_select(
                 "selected_subdistrict",
@@ -392,22 +363,13 @@ def server(input, output, _):
 
     @output
     @render.ui
-    def ward_ui():
-
-        data = load_data()
-        df = data["weather_df"]
-
+    def ward_ui(): 
         selected_city = input.selected_city()
         selected_subdistrict = input.selected_subdistrict()
-
         if selected_city and selected_subdistrict:
-            mask = pd.Series(True, index=df.index)
-            mask &= df["kota_kabupaten"] ==  selected_city # mask subdistrict based on selected city
-            mask &= df["kecamatan"] == selected_subdistrict # mask ward based on selected subdistrict
-            choices = region_filter_options(df, "desa_kelurahan", prior_mask=mask)
+            choices = ward_options(selected_city, selected_subdistrict)
         else:
             choices = []
-
         return ui.div(
             ui.input_select(
                 "selected_ward",
@@ -418,63 +380,35 @@ def server(input, output, _):
             class_="filter-block"
         )
 
-    @reactive.calc
-    def selected_region_df(): # filter dataframe to only the selected region
-
-        data = load_data()
-        df = data["weather_df"]
-
-        selected_city = input.selected_city()
-        selected_subdistrict = input.selected_subdistrict()
-        selected_ward = input.selected_ward()
-
-        # if selected_city:
-        #     df = df[df["kota_kabupaten"] == selected_city]
-        # if selected_subdistrict:
-        #     df = df[df["kecamatan"] == selected_subdistrict]
-        # if selected_ward:
-        #     df = df[df["desa_kelurahan"] == selected_ward]
-        if selected_city and selected_city in df["kota_kabupaten"].values:
-            df = df[df["kota_kabupaten"] == selected_city]
-
-        if selected_subdistrict and selected_subdistrict in df["kecamatan"].values:
-            df = df[df["kecamatan"] == selected_subdistrict]
-
-        if selected_ward and selected_ward in df["desa_kelurahan"].values:
-            df = df[df["desa_kelurahan"] == selected_ward]
-
-        return df
-
     @ reactive.calc
-    def current_time_for_metrics():
-        window = query_window.get()
-        #!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!
-        # this pipeline assumes that the 'current time' is the start_time (which defaults to the user's current system time)
-        current_time = window.get("start_time")
-        df = selected_region_df()
-        return nearest_available_time_in_df(df, current_time) # output pd.Timestamp
+    def current_time_for_metrics(): # get the nearest time in region filtered df to the current time
+        times = pd.Series(forecast_times()) # convert list[pd.Timestamp] to pd.Series
+        nearest_idx = (times - current_time).abs().idxmin()
+        return pd.Timestamp(times.loc[nearest_idx])
 
     @reactive.calc
     def current_snapshot(): # get the weather data for selected region and time
-        df = selected_region_df() # pd.DataFrame
-        ts = current_time_for_metrics() # pd.Timestamp; nearest timestamp in the region-filtered df to the current time
-        return weather_at_selected_time(df, ts) # this ideally should output a database with only one row since timestamp and region code are the unique parameters
+        region_code = ward_final_selection(input.selected_city(), 
+                                           input.selected_subdistrict(), 
+                                           input.selected_ward()
+                                           )
+        current_time_df = current_time_for_metrics()
+        return current_condition( # this ideally should output a database with only one row since timestamp and region code are the unique parameters
+            region_code,
+            current_time_df,
+            )
 
     @output
     @render.ui
     def current_time_caption():
-        # now_local = pd.Timestamp('2026-03-20 13:42:15.382917')
-        # now_local = pd.Timestamp.now(tz="Asia/Jakarta").strftime("%B %d %Y, %H:%M")
-        window = query_window.get()
-        current_time = window.get("start_time").strftime("%B %d %Y, %H:%M")
+        current_time_caption = current_time.strftime("%B %d %Y, %H:%M")
         current_time_df = current_time_for_metrics()
         current_time_df = current_time_df.strftime("%B %d %Y, %H:%M")
 
-        df = selected_region_df()
         return ui.div(
-            ui.div(f"Current Jakarta time: {current_time} WIB", class_="current-time-caption"),
+            ui.div(f"Current Jakarta time: {current_time_caption} WIB", class_="current-time-caption"),
             ui.div(f"Actual data shown is at time: {current_time_df} WIB", class_="city-summary-note"),
-            # ui.div(f"{available_times_in_data(df)}") # debug check
+            # ui.div(f"{forecast_times()}") # debug check
             )
 
     @output
@@ -495,20 +429,43 @@ def server(input, output, _):
 
         return ui.div(ui.HTML(html), class_="metric-grid metric-grid-5")
 
+    @output
+    @render.ui
+    def future_forecast_caption():
+        return ui.h3(f"Future forecast at {input.selected_ward()}", class_="panel-subtitle"),
+    
     @reactive.calc
     def future_forecast_df(): # getting weather data after current time at selected region
-        df = selected_region_df()
-        ts = current_time_for_metrics()
-        return (
-            df[df["local_datetime"] > ts]
-            .sort_values("local_datetime") # to make sure the cards are sorted correctly
-            .copy()
-        )
+        selected_city = input.selected_city()
+        selected_subdistrict = input.selected_subdistrict()
+        selected_ward = input.selected_ward()
+
+        if not (selected_city and selected_subdistrict and selected_ward):
+            return pd.DataFrame() # to guard brief state between changin city and subdistrict
+        
+        region_code = ward_final_selection(selected_city, 
+                                        selected_subdistrict, 
+                                        selected_ward
+                                        )
+        
+        if region_code is None:
+            return pd.DataFrame() # to guard brief state between changin city and subdistrict
+        
+        current_time_df = current_time_for_metrics() # as starting time
+        end_time = query_window.get().get("end_time")
+        return future_forecast( # return pd.DataFrame for all rows of selected regions after the current time
+            region_code,
+            current_time_df,
+            end_time,
+            )
 
     @output
     @render.ui
     def future_forecast_cards_ui():
         df = future_forecast_df()
+
+        if df.empty:
+            return ui.div("No available data.", class_="city-summary-note") # to guard brief state between changin city and subdistrict
 
         cards = []
         for ward_, hi_, risk_, ts_ in zip( # note: not using iterrows() due to slow performance
@@ -537,19 +494,20 @@ def server(input, output, _):
     @output
     @render.ui
     def heat_evolution_caption():
-        return ui.h3(f"Heat index evolution at {input.selected_ward()}", class_="panel-subtitle"),
+        return ui.h3(f"Future forecast at {input.selected_ward()} in graph", class_="panel-subtitle"),
 
     @render_widget
     def heat_index_evolution_plot():
-        data = load_data()
-        df = data["weather_df"]
-
-        df = df[df["kota_kabupaten"] == "Kota Adm. Jakarta Barat"]
-        df = df[df["kecamatan"] == "Cengkareng"]
-        df = df[df["desa_kelurahan"] == "Cengkareng Barat"]
-
-        df = df[["local_datetime", "temperature_c", "heat_index_c"]] # pd.DataFrame
-
+        
+        # set initial region for creating plot
+        region_code = ward_final_selection("Kota Adm. Jakarta Barat", 
+                                "Cengkareng", 
+                                "Cengkareng Barat",
+                                )
+        current_time_df = current_time_for_metrics() # as starting time
+        end_time = query_window.get().get("end_time")
+        
+        df = future_forecast(region_code, current_time_df, end_time)
         evolution_values = create_heat_index_arr(df)
 
         return build_heat_index_plot(
@@ -577,7 +535,6 @@ def server(input, output, _):
         # slicing created grouped dictionary at selected_time
         colormap = create_dynamic_colormap(
             boundary_index=data["boundary_index"],
-            weather_lookup=weather_data_lookup(),
             selected_time=selected_time,
         )
 
@@ -599,7 +556,6 @@ def server(input, output, _):
         # slicing created grouped dictionary at selected_time
         timestamp_summary = city_summary_at_time(
                             selected_time=selected_time, # initial average value for first timestamp
-                            weather_lookup=weather_data_lookup(),
                             )
 
         widget = getattr(city_summary_plot, "widget", None)
@@ -619,7 +575,7 @@ def server(input, output, _):
     @reactive.effect
     def _update_heat_index_plot_in_place():
 
-        df = selected_region_df()
+        df = future_forecast_df()
         evolution_values = create_heat_index_arr(df)
 
         widget = heat_index_evolution_plot.widget

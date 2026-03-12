@@ -1,22 +1,25 @@
 body {
     background: rgba(232, 80, 80, 0.1);
+    /* background: rgba(255, 255, 255, 0.1); */
 }
 
 .page-title {
     font-size: 2.5rem;
     font-weight: 700;
     margin-bottom: 0.01em;
-    margin-top: 1.5rem;
-    margin-left: 0.1rem;
+    margin-top: 0.1rem;
+    padding-left: 1.rem;
 }
 .title-block {
-    margin-left: 0.1rem;
+    margin-left: 0rem;
+    margin-top: 0rem;
+    text-align: center;
 }
 .page-subtitle {
     font-size: 1.2rem;
     font-weight: 400;
     margin-bottom: 1rem;
-    margin-left: 0.1rem;
+    margin-left: 1.rem;
 }
 .panel-box {
     background: rgba(224, 182, 154, 0.2);
