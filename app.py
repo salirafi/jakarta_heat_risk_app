@@ -230,10 +230,14 @@ def server(input, output, _):
         # assign query window
         window = query_window.get()
         start_time = window.get("start_time")
-        end_time = window.get("end_time")
+        end_time = window.get("end_time").ceil(freq='h')
+
+        # make sure to include data closes to current time (3-hourly data divided by 2)
+        start_time_input = start_time.floor(freq='h') - pd.Timedelta(hours=1.5) 
+        end_time_input = end_time.ceil(freq='h') + pd.Timedelta(hours=1.5)
 
         # load data
-        weather_data = load_weather_data(start_time, end_time) # pd.DataFrame
+        weather_data = load_weather_data(start_time_input, end_time_input) # pd.DataFrame
         boundary_data, boundary_json = load_boundary_data() # gpd.GeoDataFrame and JSON dict
 
         # indexing region code for choropleth plotting
@@ -457,9 +461,12 @@ def server(input, output, _):
         current_time = window.get("start_time").strftime("%B %d %Y, %H:%M")
         current_time_df = current_time_for_metrics()
         current_time_df = current_time_df.strftime("%B %d %Y, %H:%M")
+
+        df = selected_region_df()
         return ui.div(
             ui.div(f"Current Jakarta time: {current_time} WIB", class_="current-time-caption"),
-            ui.div(f"Actual data shown is at time: {current_time_df} WIB", class_="city-summary-note")
+            ui.div(f"Actual data shown is at time: {current_time_df} WIB", class_="city-summary-note"),
+            # ui.div(f"{available_times_in_data(df)}") # debug check
             )
 
     @output
