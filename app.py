@@ -6,18 +6,18 @@ This can be changed by changing default_start_time variable, but note that the d
 
 from shiny import ui, App, reactive, render
 from shinywidgets import output_widget, render_widget
+import plotly.graph_objects as go
 import pandas as pd
 from html import escape
-import sqlite3
 
-from src.constant import DB_PATH, BOUNDARY_TABLE, WEATHER_TABLE, CITY_ORDER, HEAT_RISK_GUIDE
+from src.constant import DB_PATH, BOUNDARY_TABLE, WEATHER_TABLE, CITY_ORDER, HEAT_RISK_GUIDE, RISK_COLOR_MAP
 from src.helpers import *
 from src.plotting import *
 
 app_ui = ui.page_fluid(
 
-    # ui.tags.link(href="styles.css", rel="stylesheet"),
-    ui.head_content(ui.include_css("styles.css")),
+    ui.tags.link(href="styles.css", rel="stylesheet"),
+    # ui.head_content(ui.include_css("styles.css")),
 
     ui.div(
         ui.div("Jakarta's Heat Risk Map and Forecast", class_="page-title"),
@@ -97,148 +97,35 @@ def server(input, output, _):
     query_window = reactive.Value({"start_time": default_start_time, # reactive value used; when it changes, all process downstreams invalidated
                                     "end_time": default_start_time + pd.Timedelta(days=1.0)
                                     })
-
-    @reactive.calc
-    def db_time_coverage(): # function to check current user's time to database time coverage
-
-        # check if database exists
-        if not DB_PATH.exists():
-            return {"status": "missing_db"}
-
-        # check if table exists
-        existing_tables = set(get_table_names())
-        if BOUNDARY_TABLE not in existing_tables:
-            return {"status": "missing_boundary_table"}
-        if WEATHER_TABLE not in existing_tables:
-            return {"status": "missing_weather_table"}
-
-        try:
-            # getting min max time from database to # check if user's time is outside the range of database timestamp coverage
-            with sqlite3.connect(DB_PATH) as conn:
-                row = pd.read_sql_query(
-                    f"""
-                    SELECT
-                        MIN(local_datetime) AS min_ts,
-                        MAX(local_datetime) AS max_ts
-                    FROM {WEATHER_TABLE}
-                    """,
-                    conn,
-                ).iloc[0]
-
-            min_ts = pd.to_datetime(row["min_ts"])
-            max_ts = pd.to_datetime(row["max_ts"])
-
-            if pd.isna(min_ts) or pd.isna(max_ts):
-                return {"status": "empty_weather_table"}
-
-            now_local = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
-
-            return {
-                "status": "ok",
-                "min_ts": min_ts,
-                "max_ts": max_ts,
-                "now": now_local,
-                "is_outdated": now_local < min_ts or now_local > max_ts,
-            }
-
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    @reactive.effect
-    def _show_blocking_db_update_modal(): # immediate reactive effect when the system has checked the time
-        info = db_time_coverage()
-
-        status = info.get("status")
-
-        if status == "ok" and not info.get("is_outdated", False):
-            return
-
-        if status == "ok":
-            body = ui.div(
-                ui.h3("Database update required"),
-                ui.p(
-                    "The app's current Jakarta time is outside the timestamp range covered by the database."
-                ),
-                ui.p(
-                    f"Database coverage: {info['min_ts']} to {info['max_ts']} WIB"
-                ),
-                ui.p(
-                    f"Current time: {info['now']} WIB"
-                ),
-                ui.p("Please rebuild or update the database first, then reload this page. Check the ",
-                    ui.a("Github repo",href="https://github.com/salirafi",target="_blank", class_='footer-text'),
-                    " to see how to update.",
-                ),
-            )
-        elif status == "missing_db":
-            body = ui.div(
-                ui.h3("Database not found"),
-                ui.p("The file 'heat_risk.db' was not found."),
-                ui.p("Please rebuild or update the database first, then reload this page. Check the ",
-                    ui.a("Github repo",href="https://github.com/salirafi",target="_blank", class_='footer-text'),
-                    " to see how to update.",
-                ),
-            )
-        elif status == "missing_boundary_table":
-            body = ui.div(
-                ui.h3("Database incomplete"),
-                ui.p(f"Table '{BOUNDARY_TABLE}' was not found."),
-                ui.p("Please rebuild or update the database first, then reload this page. Check the ",
-                    ui.a("Github repo",href="https://github.com/salirafi",target="_blank", class_='footer-text'),
-                    " to see how to update.",
-                ),
-            )
-        elif status == "missing_weather_table":
-            body = ui.div(
-                ui.h3("Database incomplete"),
-                ui.p(f"Table '{WEATHER_TABLE}' was not found."),
-                ui.p("Please rebuild or update the database first, then reload this page. Check the ",
-                    ui.a("Github repo",href="https://github.com/salirafi",target="_blank", class_='footer-text'),
-                    " to see how to update.",
-                ),
-            )
-        elif status == "empty_weather_table":
-            body = ui.div(
-                ui.h3("Weather database is empty"),
-                ui.p("No weather timestamps are available."),
-                ui.p("Please rebuild or update the database first, then reload this page. Check the ",
-                    ui.a("Github repo",href="https://github.com/salirafi",target="_blank", class_='footer-text'),
-                    " to see how to update.",
-                ),
-            )
-        else:
-            body = ui.div(
-                ui.h3("Database check failed"),
-                ui.p(info.get("message", "Unknown error.")),
-                ui.p("Please rebuild or update the database first, then reload this page. Check the ",
-                    ui.a("Github repo",href="https://github.com/salirafi",target="_blank", class_='footer-text'),
-                    " to see how to update.",
-                ),
-            )
-
-        modal = ui.modal(
-            body,
-            title=None,
-            easy_close=False,
-            footer=None,
-        )
-        ui.modal_show(modal)
     
     @reactive.calc
     def load_data():
 
+        # if no table at the specified path
+        if not DB_PATH.exists():
+            return {"error": "Database file 'heat_risk.db' was not found."}
+
+        # check if required tables exist
+        existing_tables = set(get_table_names())
+        if BOUNDARY_TABLE not in existing_tables:
+            return {"error": f"Table {BOUNDARY_TABLE} was not found."}
+        if WEATHER_TABLE not in existing_tables:
+            return {"error": f"Table {WEATHER_TABLE} was not found."}
+
         # assign query window
         window = query_window.get()
         start_time = window.get("start_time")
-        end_time = window.get("end_time").ceil(freq='h')
-
-        # make sure to include data closes to current time (3-hourly data divided by 2)
-        start_time_input = start_time.floor(freq='h') - pd.Timedelta(hours=1.5) 
-        end_time_input = end_time.ceil(freq='h') + pd.Timedelta(hours=1.5)
+        end_time = window.get("end_time")
 
         # load data
-        weather_data = load_weather_data(start_time_input, end_time_input) # pd.DataFrame
+        weather_data = load_weather_data(start_time, end_time) # pd.DataFrame
         boundary_data, boundary_json = load_boundary_data() # gpd.GeoDataFrame and JSON dict
+
+        # telling error if any of the table is empty
+        if boundary_data.empty:
+            return {"error": "Boundary table is empty"}
+        if weather_data.empty:
+            return {"error": "Weather table is empty for the selected time window"}
 
         # indexing region code for choropleth plotting
         boundary_index = boundary_data[["adm4"]].copy().sort_values("adm4").reset_index(drop=True) # pd.DataFrame
@@ -250,16 +137,21 @@ def server(input, output, _):
             "weather_df": weather_data,
             "query_start_time": start_time,
             "query_end_time": end_time,
+            "error": None,
         }
 
     @reactive.calc
     def weather_data_lookup():
         data = load_data()
+        # if "error" in data:
+        #     return {}
         return build_weather_data_lookup(data["weather_df"])
 
     @reactive.calc
     def forecast_times():
         data = load_data()
+        # if "error" in data:
+        #     return []
         return available_times_in_data(data["weather_df"])
 
     # create map figure
@@ -267,10 +159,12 @@ def server(input, output, _):
     def heat_risk_map():
 
         data = load_data()
+        # if "error" in data:
+        #     return go.Figure()
 
         times = forecast_times() # list of unique timestamps in data["weather_df"]
         if not times:
-            return ui.div("No available data", class_='city-summary-note')
+            return go.Figure()
         selected_time = times[0] # initial timestamp to show (first timestamp in data)
 
         # slicing created grouped dictionary at selected_time
@@ -292,7 +186,7 @@ def server(input, output, _):
 
         times = forecast_times() # list of unique timestamps in data["weather_df"]
         if not times:
-            return ui.div("No available data", class_='city-summary-note')
+            return go.Figure()
 
         initial_summary = city_summary_at_time(
                             selected_time=times[0], # initial average value for first timestamp
@@ -341,6 +235,8 @@ def server(input, output, _):
     def selected_map_time_text():
 
         selected = input.selected_time()
+        if selected is None:
+            return ui.div("No available data", class_='city-summary-note')
 
         selected_time = pd.Timestamp(selected).strftime("%b %d %Y, %H:%M")
         return ui.div(
@@ -353,6 +249,8 @@ def server(input, output, _):
     def city_ui():
 
         data = load_data()
+        # if "error" in data:
+        #     return ui.div("No available data", class_='city-summary-note')
 
         choices = region_filter_options(data["weather_df"], "kota_kabupaten") # for city-level, no prior_mask
         
@@ -371,6 +269,8 @@ def server(input, output, _):
     def subdistrict_ui():
 
         data = load_data()
+        # if "error" in data:
+        #     return ui.div("No available data", class_='city-summary-note')
         df = data["weather_df"]
 
         selected_city = input.selected_city()
@@ -395,6 +295,8 @@ def server(input, output, _):
     def ward_ui():
 
         data = load_data()
+        # if "error" in data:
+        #     return ui.div("No available data", class_='city-summary-note')
         df = data["weather_df"]
 
         selected_city = input.selected_city()
@@ -422,6 +324,8 @@ def server(input, output, _):
     def selected_region_df(): # filter dataframe to only the selected region
 
         data = load_data()
+        # if "error" in data:
+        #     return ui.div("No available data", class_='city-summary-note')
         df = data["weather_df"]
 
         selected_city = input.selected_city()
@@ -460,13 +364,10 @@ def server(input, output, _):
         window = query_window.get()
         current_time = window.get("start_time").strftime("%B %d %Y, %H:%M")
         current_time_df = current_time_for_metrics()
-        current_time_df = current_time_df.strftime("%B %d %Y, %H:%M")
-
-        df = selected_region_df()
+        current_time = current_time_df.strftime("%B %d %Y, %H:%M") if current_time_df is not None else "No matching data"
         return ui.div(
             ui.div(f"Current Jakarta time: {current_time} WIB", class_="current-time-caption"),
-            ui.div(f"Actual data shown is at time: {current_time_df} WIB", class_="city-summary-note"),
-            # ui.div(f"{available_times_in_data(df)}") # debug check
+            ui.div(f"Actual data shown is at time: {current_time_df} WIB", class_="city-summary-note")
             )
 
     @output
@@ -534,6 +435,8 @@ def server(input, output, _):
     @render_widget
     def heat_index_evolution_plot():
         data = load_data()
+        # if "error" in data:
+        #     return go.Figure()
         df = data["weather_df"]
 
         df = df[df["kota_kabupaten"] == "Kota Adm. Jakarta Barat"]
@@ -563,8 +466,8 @@ def server(input, output, _):
 
         data = load_data()
         selected_time =  pd.Timestamp(input.selected_time())
-        if selected_time is None:
-            return
+        # if selected_time is None or "error" in data:
+        #     return
 
         # slicing created grouped dictionary at selected_time
         colormap = create_dynamic_colormap(
@@ -612,6 +515,7 @@ def server(input, output, _):
     def _update_heat_index_plot_in_place():
 
         df = selected_region_df()
+        return ui.div(f"{type(df)}")
         evolution_values = create_heat_index_arr(df)
 
         widget = heat_index_evolution_plot.widget
@@ -763,6 +667,5 @@ def server(input, output, _):
             ),
             style="margin-top: 1.5rem; margin-bottom: 0.5rem"
         )
-
 
 app = App(app_ui, server)
