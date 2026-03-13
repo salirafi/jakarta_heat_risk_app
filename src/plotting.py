@@ -30,10 +30,10 @@ def build_map_figure(
             marker_line_color="rgba(70,70,70,0.8)",
             marker_line_width=0.8,
             hovertemplate=(
-                "&nbsp;<b>%{customdata[1]}, %{customdata[2]}</b>&nbsp;<br>"
-                "&nbsp;%{customdata[4]|%b %d %H:%M}&nbsp;<br>"
-                f"&nbsp;{'Heat index'} %{{customdata[7]:.1f}} °C - %{{customdata[8]}}&nbsp;<br>"
-                "&nbsp;%{customdata[9]}&nbsp;"
+                "&nbsp;<b>%{customdata[0]}, %{customdata[1]}</b>&nbsp;<br>"
+                "&nbsp;%{customdata[2]|%b %d %H:%M}&nbsp;<br>"
+                f"&nbsp;{'Heat index'} %{{customdata[3]:.1f}} °C - %{{customdata[4]}}&nbsp;<br>"
+                "&nbsp;%{customdata[5]}&nbsp;"
                 "<extra></extra>"
             )
         )
@@ -91,35 +91,84 @@ def make_discrete_colorscale():
 
 # function to variable that contains colormap and metadata for choropleth plotting
 # this is made since the colormap is the slide-dependent component, not the boundary polygon data 
+# def create_dynamic_colormap(
+#     boundary_index: pd.DataFrame,
+#     selected_time: pd.Timestamp, # time selected from the slider
+#     conn,
+# ):
+    
+#     selected_time = pd.to_datetime(selected_time)
+    
+#     query = f"""
+#         SELECT adm4, desa_kelurahan, kecamatan,
+#             local_datetime, heat_index_c, temperature_c, risk_level, weather_desc
+#         FROM {WEATHER_TABLE}
+#         WHERE local_datetime = '{selected_time}'
+#         """
+
+#     index_df = boundary_index.copy() # dataframe for region/boundary index
+#     time_df = run_query(query, conn)
+
+#     merged = index_df.merge(time_df, on="adm4", how="left") # merge based on region code adm4
+#     merged["risk_level"] = merged["risk_level"].fillna("No Data") # if no data on risk_level, fill with "No Data"
+#     merged["desa_kelurahan"] = merged["desa_kelurahan"].fillna("")
+#     merged["kecamatan"] = merged["kecamatan"].fillna("")
+#     merged["weather_desc"] = merged["weather_desc"].fillna("")
+#     merged["local_datetime"] = merged["local_datetime"].apply(format_timestamp)
+
+#     # mapping risk level in string to numerical code for faster reading by numpy
+#     z = merged["risk_level"].map(RISK_CODE_MAP).fillna(RISK_CODE_MAP["No Data"]).astype(float).to_numpy()
+
+#     # saving data for hover text on the map
+#     customdata = np.column_stack(
+#         [
+#             merged["desa_kelurahan"].astype(str).to_numpy(),
+#             merged["kecamatan"].astype(str).to_numpy(),
+#             merged["local_datetime"].astype(str).to_numpy(),
+#             merged["heat_index_c"].to_numpy(dtype=object),
+#             merged["risk_level"].astype(str).to_numpy(),
+#             merged["weather_desc"].astype(str).to_numpy(),
+#         ]
+#     )
+
+#     return {
+#         "z": z,
+#         "customdata": customdata,
+#     }
 def create_dynamic_colormap(
-    boundary_index: pd.DataFrame,
-    selected_time: pd.Timestamp, # time selected from the slider
+    selected_time: pd.Timestamp,
     conn,
 ):
-    
-    selected_time = pd.to_datetime(selected_time)
-    
+    selected_time = pd.to_datetime(selected_time).strftime("%Y-%m-%d %H:%M:%S")
+
     query = f"""
-        SELECT adm4, desa_kelurahan, kecamatan,
-            local_datetime, heat_index_c, temperature_c, risk_level, weather_desc
-        FROM {WEATHER_TABLE}
-        WHERE local_datetime = '{selected_time}'
-        """
+        SELECT
+            b.adm4 AS adm4,
+            COALESCE(w.desa_kelurahan, '') AS desa_kelurahan,
+            COALESCE(w.kecamatan, '') AS kecamatan,
+            w.local_datetime AS local_datetime,
+            w.heat_index_c AS heat_index_c,
+            COALESCE(w.risk_level, 'No Data') AS risk_level,
+            COALESCE(w.weather_desc, '') AS weather_desc
+        FROM map_boundary_index b
+        LEFT JOIN {WEATHER_TABLE} w
+            ON b.adm4 = w.adm4
+           AND w.local_datetime = '{selected_time}'
+        ORDER BY b.adm4
+    """
 
-    index_df = boundary_index.copy() # dataframe for region/boundary index
-    time_df = run_query(query, conn)
+    merged = run_query(query, conn)
 
-    merged = index_df.merge(time_df, on="adm4", how="left") # merge based on region code adm4
-    merged["risk_level"] = merged["risk_level"].fillna("No Data") # if no data on risk_level, fill with "No Data"
-    merged["desa_kelurahan"] = merged["desa_kelurahan"].fillna("")
-    merged["kecamatan"] = merged["kecamatan"].fillna("")
-    merged["weather_desc"] = merged["weather_desc"].fillna("")
     merged["local_datetime"] = merged["local_datetime"].apply(format_timestamp)
 
-    # mapping risk level in string to numerical code for faster reading by numpy
-    z = merged["risk_level"].map(RISK_CODE_MAP).fillna(RISK_CODE_MAP["No Data"]).astype(float).to_numpy()
+    z = (
+        merged["risk_level"]
+        .map(RISK_CODE_MAP)
+        .fillna(RISK_CODE_MAP["No Data"])
+        .astype(float)
+        .to_numpy()
+    )
 
-    # saving data for hover text on the map
     customdata = np.column_stack(
         [
             merged["desa_kelurahan"].astype(str).to_numpy(),
@@ -128,6 +177,7 @@ def create_dynamic_colormap(
             merged["heat_index_c"].to_numpy(dtype=object),
             merged["risk_level"].astype(str).to_numpy(),
             merged["weather_desc"].astype(str).to_numpy(),
+            merged["adm4"].astype(str).to_numpy(),
         ]
     )
 
@@ -357,7 +407,7 @@ def build_heat_index_plot(
             showgrid=True,
             gridcolor="rgba(0,0,0,0.08)",
             zeroline=False,
-            visible=True,
+            visible=False,
         ),
         yaxis=dict(
             title="Heat Index (°C)",
@@ -369,6 +419,7 @@ def build_heat_index_plot(
 
         yaxis2=dict(
             title="Temperature (°C)",
+            range=evolution_values["y_range"], # make sure the range of the temperature is the same as heat index for non-biased comparison
             overlaying="y",
             side="right",
             showgrid=False,

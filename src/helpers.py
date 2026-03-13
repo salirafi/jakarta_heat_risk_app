@@ -71,17 +71,17 @@ def load_boundary_data() -> tuple[pd.DataFrame, dict]:
     with open(BOUNDARY_GEOJSON_PATH, "r", encoding="utf-8") as f:
         geojson = json.load(f) # becomes dict
 
-    features = geojson.get("features", [])
-    boundary_index = pd.DataFrame(
-        {
-            "adm4": [
-                str(feature.get("properties", {}).get("adm4", "")).strip()
-                for feature in features
-            ]
-        }
-    )
+    # features = geojson.get("features", [])
+    # boundary_index = pd.DataFrame(
+    #     {
+    #         "adm4": [
+    #             str(feature.get("properties", {}).get("adm4", "")).strip()
+    #             for feature in features
+    #         ]
+    #     }
+    # )
 
-    return boundary_index, geojson
+    return geojson
 
 # get unique timestamp values in weather data
 def available_timestamps(start_time: pd.Timestamp, end_time: pd.Timestamp, conn) -> list[pd.Timestamp]:
