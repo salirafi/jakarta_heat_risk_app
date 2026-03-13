@@ -4,6 +4,8 @@ This repository contains the source code to build a Python-based web application
 
 To interact with the app without going through difficulty installing anything, please go to my [HuggingFace space](https://huggingface.co/spaces/salirafi/Jakarta-Heat-Risk-App).
 
+⚠️ **IMPORTANT!** ⚠️  This app is a personal project for data analysis learning, so the BMKG API is not used directly in the app, but rather as database fetching. Also, code might not be optimized for smoother user's experience. For first time loading, the web might take a few seconds.
+
 ## Running
 
 This code can be run with `python3.11`. Before running the code, make sure all prerequisites are installed. Run in the terminal
@@ -33,8 +35,6 @@ to connect to the web app.
 Please note that the web app shows the weather forecast from roughly the user's current system time up to 1 day (by default) to the future whenever data is available. If the database is not up-to-date (the database time coverage does not cover the current Jakarta time), then the app pops out a blocker notification prompting the user to update the database.
 
 If the user wants to run [fetch_boundary_data.py](src/fetch_boundary_data.py), make sure they have downloaded the required .gdb file from [here](https://geoservices.big.go.id/portal/apps/webappviewer/index.html?id=cb58db080712468cb4bfd408dbde3d70).
-
-⚠️ **IMPORTANT!** ⚠️  This app is a personal project for data analysis learning, so the BMKG API is not used directly in the app, but rather as database fetching. Also, code might not be optimized for smoother user's experience. For first time loading, the web might take a few seconds.
 
 ## Content
 
