@@ -17,6 +17,7 @@ DB_PATH = BASE_DIR / "tables" / "heat_risk.db"
 
 GDB_PATH = BASE_DIR / "fetch" / "RBI10K_ADMINISTRASI_DESA_20230928.gdb"
 OUTPUT_TABLE = "ward_boundary_table"
+OUTPUT_BOUNDARY_INDEX_TABLE = "map_boundary_index"
 OUTPUT_GEOJSON = BASE_DIR / "tables" / "jakarta_boundary_simplified.geojson"
 # layer's name can be checked with the following code: print(fiona.listlayers(gdb_path)); see list_gdb_layers() function below
 GDB_LAYER = "ADMINISTRASI_AR_DESAKEL"
@@ -109,6 +110,28 @@ def build_and_export_table(gdf: gpd.GeoDataFrame) -> pd.DataFrame:
 
     return gdf
 
+# create boundary index to merge with weather table for choropleth plotting
+# without it, the indexing of the color to the corresponding region will be incorrect
+# this is separate from ward_boundary_table_simplified (that contains the geometry data) to save memory usage in the web app
+def build_boundary_index_table(gdf: gpd.GeoDataFrame) -> pd.DataFrame:
+    """
+    Build a tiny boundary index table used for SQL LEFT JOINs in the app
+    Contains one row per adm4 code
+    """
+    df = gdf.copy()
+
+    df["KDEPUM"] = df["KDEPUM"].astype(str).str.strip()
+
+    index_df = (
+        df[["KDEPUM"]]
+        .drop_duplicates(subset=["KDEPUM"])
+        .rename(columns={"KDEPUM": "adm4"})
+        .sort_values("adm4")
+        .reset_index(drop=True)
+    )
+
+    return index_df
+
 def save_boundary_table(df: pd.DataFrame, db_path: Path, table_name: str) -> None:
     """Write the boundary table into SQLite, replacing any older version"""
     with sqlite3.connect(db_path) as conn:
@@ -116,13 +139,23 @@ def save_boundary_table(df: pd.DataFrame, db_path: Path, table_name: str) -> Non
         # should be replace not append, since we want to overwrite any old version of the table
         df.to_sql(table_name, conn, if_exists="replace", index=False)
 
+def save_boundary_index_table(df: pd.DataFrame, db_path: Path, table_name: str) -> None:
+    """Write the boundary index table into SQLite and add an index on adm4"""
+    with sqlite3.connect(db_path) as conn:
+        df.to_sql(table_name, conn, if_exists="replace", index=False)
+        conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_adm4 ON {table_name}(adm4)")
+        conn.commit()
+
 def main() -> None:
 
     layers = list_gdb_layers(GDB_PATH)
     gdf = load_boundary_layer(GDB_PATH, GDB_LAYER)
     gdf_jakarta = filter_jakarta_boundaries(gdf)
     boundary_df = build_and_export_table(gdf_jakarta)
-    save_boundary_table(boundary_df, DB_PATH, OUTPUT_TABLE+'_simplified')
+    boundary_index_df = build_boundary_index_table(gdf_jakarta)
+
+    save_boundary_table(boundary_df, DB_PATH, OUTPUT_TABLE + "_simplified")
+    save_boundary_index_table(boundary_index_df, DB_PATH, OUTPUT_BOUNDARY_INDEX_TABLE)
 
     print("")
     print("")
