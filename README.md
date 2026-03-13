@@ -18,11 +18,7 @@ Then, if the user wants up-to-date weather data, in the parent folder, run
 ```
 python3 .\fetch\fetch_weather_data.py
 ```
-or, if the user uses Windows, alternatively type in terminal
-```
-fetch_weather_data.bat
-```
-or simply double-click it to run the script through .bat file. This might run for around 4 to 5 minutes (see Content section).
+This might run for around 4 to 5 minutes (see Content section).
 
 Finally, run
 ```
