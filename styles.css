@@ -411,6 +411,12 @@ body {
     flex: 0 0 auto;
     margin-bottom: 0.5rem;
 }
+.heat-index-note {
+    color: #666666;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.1rem;
+}
 .heat-index-section > .shiny-plotly-output,
 .heat-index-section > .html-widget,
 .heat-index-section > .plotly html-widget,

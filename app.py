@@ -15,7 +15,7 @@ from src.helpers import *
 from src.plotting import *
 
 # load data
-boundary_index, boundary_json = load_boundary_data() # pd.DataFrame and JSON dict
+boundary_json = load_boundary_data() # pd.DataFrame and JSON dict
 
 # definition of current_time
 current_time = pd.Timestamp.now(tz="Asia/Jakarta").tz_localize(None)
@@ -52,6 +52,7 @@ app_ui = ui.page_fluid(
                 ui.div(
                     # ui.output_ui("heat_evolution_caption"),
                     output_widget("heat_index_evolution_plot"),
+                    ui.p(f"*Gap between heat index and temperature shows how humid it is.", class_="heat-index-note"),
                     class_="heat-index-section",
                 ),
                 class_="panel-box right-panel-box",
@@ -252,16 +253,40 @@ def server(input, output, session):
 
         # slicing created grouped dictionary at selected_time
         colormap = create_dynamic_colormap(
-            boundary_index=boundary_index,
+            # boundary_index=boundary_index,
             selected_time=selected_time,
             conn=conn,
         )
 
         return build_map_figure(
                 boundary_geojson=boundary_json,
-                locations=boundary_index["adm4"].tolist(),
+                locations=colormap["customdata"][:,-1].tolist(),
                 colormap=colormap,
             )
+    
+    # update the map based on selected slider time
+    @reactive.effect
+    def _update_map_in_place():
+
+        selected_time =  pd.Timestamp(input.selected_time())
+        if selected_time is None:
+            return
+
+        # slicing created grouped dictionary at selected_time
+        colormap = create_dynamic_colormap(
+            # boundary_index=boundary_index,
+            selected_time=selected_time,
+            conn=conn,
+        )
+
+        widget = heat_risk_map.widget
+        widget = getattr(heat_risk_map, "widget", None)
+        if widget is None or not widget.data:
+            return
+
+        # update the color map but the boundary polygon stays
+        widget.data[0].z = colormap["z"]
+        widget.data[0].customdata = colormap["customdata"]
 
     # create city summary plot
     @render_widget
@@ -279,6 +304,31 @@ def server(input, output, session):
         return build_city_summary_plot(
                 summary_value=initial_summary,
             )
+    
+    # update the city summary plot on selected slider time
+    @reactive.effect
+    def _update_city_summary_in_place():
+
+        selected_time =  pd.Timestamp(input.selected_time())
+
+        # slicing created grouped dictionary at selected_time
+        timestamp_summary = city_summary_at_time(
+                            selected_time=selected_time, # initial average value for first timestamp
+                            conn=conn,
+                            )
+
+        widget = getattr(city_summary_plot, "widget", None)
+        if widget is None or not widget.data:
+            return
+
+        # update the color map but the boundary polygon stays
+        trace_idx = 0
+        metric_cols = ["avg_temperature_c", "avg_humidity_ptg", "avg_heat_index_c"]
+        timestamp_customdata = [[timestamp_summary["local_datetime"]] for _ in CITY_ORDER]
+        for metric_col in metric_cols:
+            widget.data[trace_idx].customdata = timestamp_customdata
+            widget.data[trace_idx].y = timestamp_summary[metric_col]
+            trace_idx += 1
 
     @output
     @render.ui
@@ -491,10 +541,10 @@ def server(input, output, session):
 
         return ui.div(ui.HTML("".join(cards)), class_="forecast-scroll")
 
-    @output
-    @render.ui
-    def heat_evolution_caption():
-        return ui.h3(f"Future forecast at {input.selected_ward()} in graph", class_="panel-subtitle"),
+    # @output
+    # @render.ui
+    # def heat_evolution_caption():
+    #     return ui.h3(f"Future forecast at {input.selected_ward()} in graph", class_="panel-subtitle"),
 
     @render_widget
     def heat_index_evolution_plot():
@@ -523,55 +573,6 @@ def server(input, output, session):
     #         ui.p(f"{snap['humidity_ptg']}"),
     #         ui.p(f"{snap['heat_index_c']}"),
     #         )
-
-    # update the map based on selected slider time
-    @reactive.effect
-    def _update_map_in_place():
-
-        selected_time =  pd.Timestamp(input.selected_time())
-        if selected_time is None:
-            return
-
-        # slicing created grouped dictionary at selected_time
-        colormap = create_dynamic_colormap(
-            boundary_index=boundary_index,
-            selected_time=selected_time,
-            conn=conn,
-        )
-
-        widget = heat_risk_map.widget
-        widget = getattr(heat_risk_map, "widget", None)
-        if widget is None or not widget.data:
-            return
-
-        # update the color map but the boundary polygon stays
-        widget.data[0].z = colormap["z"]
-        widget.data[0].customdata = colormap["customdata"]
-
-    # update the city summary plot on selected slider time
-    @reactive.effect
-    def _update_city_summary_in_place():
-
-        selected_time =  pd.Timestamp(input.selected_time())
-
-        # slicing created grouped dictionary at selected_time
-        timestamp_summary = city_summary_at_time(
-                            selected_time=selected_time, # initial average value for first timestamp
-                            conn=conn,
-                            )
-
-        widget = getattr(city_summary_plot, "widget", None)
-        if widget is None or not widget.data:
-            return
-
-        # update the color map but the boundary polygon stays
-        trace_idx = 0
-        metric_cols = ["avg_temperature_c", "avg_humidity_ptg", "avg_heat_index_c"]
-        timestamp_customdata = [[timestamp_summary["local_datetime"]] for _ in CITY_ORDER]
-        for metric_col in metric_cols:
-            widget.data[trace_idx].customdata = timestamp_customdata
-            widget.data[trace_idx].y = timestamp_summary[metric_col]
-            trace_idx += 1
 
     # update the plot based on selected region
     @reactive.effect
